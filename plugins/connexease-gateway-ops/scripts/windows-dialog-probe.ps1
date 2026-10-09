@@ -49,7 +49,10 @@ function Find-Control($Window, [string]$TypeName, [string]$Name = $null) {
     }
     Start-Sleep -Milliseconds 100
   } while ([DateTime]::UtcNow -lt $deadline)
-  throw "Native dialog control is missing: $Name"
+  $types = @($children | Select-Object -First 6 | ForEach-Object {
+    "$($_.Current.ControlType.ProgrammaticName):$($_.Current.Name)"
+  }) -join ', '
+  throw "Native dialog control is missing: $Name; expected type: [$TypeName]; found: $types"
 }
 
 function Click-Button($Window, [string]$Name) {
