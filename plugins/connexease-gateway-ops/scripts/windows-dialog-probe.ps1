@@ -53,7 +53,14 @@ function Find-Control($Window, $Type, [string]$Name = $null) {
     if ($null -ne $control) { return $control }
     Start-Sleep -Milliseconds 100
   } while ([DateTime]::UtcNow -lt $deadline)
-  if ($null -eq $control) { throw "Native dialog control is missing: $Name" }
+  if ($null -eq $control) {
+    $children = $Window.FindAll([System.Windows.Automation.TreeScope]::Descendants,
+      [System.Windows.Automation.Condition]::TrueCondition)
+    $summary = @($children | Select-Object -First 15 | ForEach-Object {
+      "$($_.Current.ControlType.ProgrammaticName):$($_.Current.Name)"
+    }) -join ', '
+    throw "Native dialog control is missing: $Name; window: $($Window.Current.Name); descendants: $summary"
+  }
 }
 
 function Click-Button($Window, [string]$Name) {
