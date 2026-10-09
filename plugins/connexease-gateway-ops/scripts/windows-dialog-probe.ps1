@@ -45,7 +45,7 @@ function Find-Control($Window, $Type, [string]$Name = $null) {
       [System.Windows.Automation.Condition]::TrueCondition)
     foreach ($child in $children) {
       if ($child.Current.ControlType.ProgrammaticName -eq $Type.ProgrammaticName -and
-        ($null -eq $Name -or $child.Current.Name -eq $Name)) { return $child }
+        ([string]::IsNullOrEmpty($Name) -or $child.Current.Name -eq $Name)) { return $child }
     }
     Start-Sleep -Milliseconds 100
   } while ([DateTime]::UtcNow -lt $deadline)
