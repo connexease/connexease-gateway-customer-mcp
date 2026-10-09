@@ -7,11 +7,16 @@ Add-Type -AssemblyName UIAutomationTypes
 $helper = Join-Path $PSScriptRoot 'windows-native.ps1'
 $powershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
 
-function Find-Dialog([int]$ProcessId) {
+function Find-Dialog([System.Diagnostics.Process]$DialogProcess) {
   $condition = [System.Windows.Automation.PropertyCondition]::new(
-    [System.Windows.Automation.AutomationElement]::ProcessIdProperty, $ProcessId)
+    [System.Windows.Automation.AutomationElement]::ProcessIdProperty, $DialogProcess.Id)
   $deadline = [DateTime]::UtcNow.AddSeconds(10)
   do {
+    if ($DialogProcess.HasExited) {
+      $stdout = $DialogProcess.StandardOutput.ReadToEnd().Trim()
+      $stderr = $DialogProcess.StandardError.ReadToEnd().Trim()
+      throw "Native helper exited before showing a dialog (exit $($DialogProcess.ExitCode)); stdout: $stdout; stderr: $stderr"
+    }
     $windows = [System.Windows.Automation.AutomationElement]::RootElement.FindAll(
       [System.Windows.Automation.TreeScope]::Children, $condition)
     if ($windows.Count -gt 0) { return $windows.Item(0) }
@@ -56,7 +61,7 @@ function Exercise-Dialog([string]$Action, $Payload, [string]$ExpectedStatus, [st
     $taskProcess.StandardInput.Write(($Payload | ConvertTo-Json -Compress -Depth 8))
     $taskProcess.StandardInput.Close()
 
-    $window = Find-Dialog $taskProcess.Id
+    $window = Find-Dialog $taskProcess
     if ($Action -eq 'prompt') {
       $edit = Find-Control $window ([System.Windows.Automation.ControlType]::Edit)
       if ([bool]$edit.Current.IsPassword -ne [bool]$Payload.hidden) {
