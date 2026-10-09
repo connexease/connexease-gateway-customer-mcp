@@ -38,13 +38,13 @@ function Find-Dialog([System.Diagnostics.Process]$DialogProcess, [string]$Title)
   throw 'The native dialog did not appear on the Windows desktop within 10 seconds'
 }
 
-function Find-Control($Window, $Type, [string]$Name = $null) {
+function Find-Control($Window, [string]$TypeName, [string]$Name = $null) {
   $deadline = [DateTime]::UtcNow.AddSeconds(5)
   do {
     $children = $Window.FindAll([System.Windows.Automation.TreeScope]::Descendants,
       [System.Windows.Automation.Condition]::TrueCondition)
     foreach ($child in $children) {
-      if ($child.Current.ControlType.ProgrammaticName -eq $Type.ProgrammaticName -and
+      if ($child.Current.ControlType.ProgrammaticName -eq $TypeName -and
         ([string]::IsNullOrEmpty($Name) -or $child.Current.Name -eq $Name)) { return $child }
     }
     Start-Sleep -Milliseconds 100
@@ -53,7 +53,7 @@ function Find-Control($Window, $Type, [string]$Name = $null) {
 }
 
 function Click-Button($Window, [string]$Name) {
-  $button = Find-Control $Window ([System.Windows.Automation.ControlType]::Button) $Name
+  $button = Find-Control $Window 'ControlType.Button' $Name
   $pattern = $button.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern)
   $pattern.Invoke()
 }
@@ -79,7 +79,7 @@ function Exercise-Dialog([string]$Action, $Payload, [string]$ExpectedStatus, [st
     $title = if ($Action -eq 'prompt') { 'Connexease Gateway' } else { 'Confirm Connexease Gateway action' }
     $window = Find-Dialog $taskProcess $title
     if ($Action -eq 'prompt') {
-      $edit = Find-Control $window ([System.Windows.Automation.ControlType]::Edit)
+      $edit = Find-Control $window 'ControlType.Edit'
       if ([bool]$edit.Current.IsPassword -ne [bool]$Payload.hidden) {
         throw 'Password masking state does not match the requested dialog'
       }
@@ -90,7 +90,7 @@ function Exercise-Dialog([string]$Action, $Payload, [string]$ExpectedStatus, [st
         Click-Button $window 'Continue'
       }
     } else {
-      $review = Find-Control $window ([System.Windows.Automation.ControlType]::Edit)
+      $review = Find-Control $window 'ControlType.Edit'
       $valuePattern = $review.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern)
       if (-not $valuePattern.Current.IsReadOnly) { throw 'Confirmation review is editable' }
       if ($valuePattern.Current.Value -ne [string]$Payload.value) { throw 'Confirmation review does not match the exact value' }
