@@ -12,11 +12,12 @@ import { createApiKey, createOrganizationSecret, performPanelAction } from './pa
 import { addSandboxTestNumber, sendSandboxTemplate, sendSandboxText } from './sandbox-workflow.mjs';
 import { toolResult } from './tool-result.mjs';
 
-const accessTokenProvider = process.platform === 'darwin'
+const supportsNativeAccount = process.platform === 'darwin' || process.platform === 'win32';
+const accessTokenProvider = supportsNativeAccount
   ? new NativeSession()
-  : { getAccessToken: async () => { throw new Error('Local account connection currently supports macOS only'); } };
+  : { getAccessToken: async () => { throw new Error('Local account connection requires macOS or Windows'); } };
 const gateway = new GatewayApiClient({ accessTokenProvider });
-const server = new McpServer({ name: 'connexease-gateway-ops', version: '0.11.0' });
+const server = new McpServer({ name: 'connexease-gateway-ops', version: '0.12.0' });
 let signInInProgress = false;
 let accountWriteInProgress = false;
 
@@ -121,10 +122,10 @@ server.registerTool('get_my_profile', {
 }, guarded(() => gateway.getMyProfile()));
 
 server.registerTool('connect_gateway_account', {
-  description: 'Open native macOS email/password dialogs to sign in to a Gateway account chosen by the user. Do not compare its email with a computer or repository identity. Never ask for credentials in chat or tool arguments. Only call after the user explicitly requests or accepts account connection.',
+  description: 'Open native macOS or Windows email/password dialogs to sign in to a Gateway account chosen by the user. Do not compare its email with a computer or repository identity. Never ask for credentials in chat or tool arguments. Only call after the user explicitly requests or accepts account connection.',
   annotations: { readOnlyHint: false, destructiveHint: false },
 }, guarded(async () => {
-  if (process.platform !== 'darwin') throw new Error('In-session sign-in currently supports macOS only');
+  if (!supportsNativeAccount) throw new Error('In-session sign-in requires macOS or Windows');
   if (signInInProgress) throw new Error('Gateway sign-in is already in progress');
   signInInProgress = true;
   try {
@@ -135,10 +136,10 @@ server.registerTool('connect_gateway_account', {
       id: profile.id,
       email: profile.email,
       sessionPersistence: profile.sessionPersistence,
-      ...(profile.sessionPersistence !== 'keychain'
-        ? { warning: profile.sessionPersistence === 'memory_only_stale_keychain_possible'
-          ? 'Keychain save and old-token cleanup failed. This Gateway session works only in memory; an older account may return after restart. Remove the Connexease Gateway item from macOS Keychain before restarting.'
-          : 'Keychain save failed. This Gateway session works only while this AI client session remains open.' }
+      ...(!['keychain', 'windows_dpapi'].includes(profile.sessionPersistence)
+        ? { warning: profile.sessionPersistence === 'memory_only_stale_secure_store_possible'
+          ? 'Secure session storage and old-token cleanup failed. This Gateway session works only in memory; an older account may return after restart. Clear the old Connexease Gateway item from the local OS secure store before restarting.'
+          : 'Secure session storage failed. This Gateway session works only while this AI client session remains open.' }
         : {}),
     };
   } finally {
@@ -147,20 +148,20 @@ server.registerTool('connect_gateway_account', {
 }));
 
 server.registerTool('disconnect_gateway_account', {
-  description: 'Sign out of the current Gateway account and clear its local session. Requires explicit user request and native confirmation. If Keychain cleanup or server revocation fails, reports that separately.',
+  description: 'Sign out of the current Gateway account and clear its local secure session. Requires explicit user request and native confirmation. If local cleanup or server revocation fails, reports that separately.',
   annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
 }, guarded(() => oneAccountWrite(async () => {
-  if (process.platform !== 'darwin') throw new Error('Local account disconnection currently supports macOS only');
-  const approved = await confirmGatewayAction({ kind: 'panel_action', preview: { action: 'disconnect_gateway_account', details: { scope: 'current Gateway session and local Keychain item' } } });
+  if (!supportsNativeAccount) throw new Error('Local account disconnection requires macOS or Windows');
+  const approved = await confirmGatewayAction({ kind: 'panel_action', preview: { action: 'disconnect_gateway_account', details: { scope: 'current Gateway session and local secure-store item' } } });
   if (!approved) return { status: 'cancelled', disconnected: false };
   return accessTokenProvider.disconnect();
 })));
 
 server.registerTool('register_gateway_account', {
-  description: 'Create a new Gateway account only after explicit user request. Collect name, email and password in native macOS dialogs, then require a separate native creation confirmation. Credentials never enter AI tool arguments or results.',
+  description: 'Create a new Gateway account only after explicit user request. Collect name, email and password in native desktop dialogs, then require a separate native creation confirmation. Credentials never enter AI tool arguments or results.',
   annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
 }, guarded(() => oneAccountWrite(async () => {
-  if (process.platform !== 'darwin') throw new Error('Native registration currently supports macOS only');
+  if (!supportsNativeAccount) throw new Error('Native registration requires macOS or Windows');
   if (signInInProgress) throw new Error('Gateway sign-in or registration is already in progress');
   signInInProgress = true;
   try {
@@ -177,10 +178,10 @@ server.registerTool('register_gateway_account', {
 })));
 
 server.registerTool('change_gateway_password', {
-  description: 'Change the signed-in Gateway password only after explicit user request and native macOS confirmation. Current and new passwords are collected in hidden native dialogs, never in AI tool arguments or results.',
+  description: 'Change the signed-in Gateway password only after explicit user request and native desktop confirmation. Current and new passwords are collected in hidden native dialogs, never in AI tool arguments or results.',
   annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
 }, guarded(() => oneAccountWrite(async () => {
-  if (process.platform !== 'darwin') throw new Error('Native password change currently supports macOS only');
+  if (!supportsNativeAccount) throw new Error('Native password change requires macOS or Windows');
   const profile = await gateway.getMyProfile();
   const approved = await confirmGatewayAction({ kind: 'panel_action', preview: {
     action: 'change_gateway_password', details: { accountId: profile.id, email: profile.email, password: 'entered locally and hidden' },
@@ -218,12 +219,12 @@ server.registerTool('start_gateway_password_reset', {
 })));
 
 server.registerTool('verify_gateway_password_reset_code', {
-  description: 'Verify the password-reset code in a hidden macOS dialog. The code and single-use reset token are never returned to the AI client.',
+  description: 'Verify the password-reset code in a hidden native desktop dialog. The code and single-use reset token are never returned to the AI client.',
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
 }, guarded(() => oneAccountWrite(async () => accessTokenProvider.verifyPasswordResetCode(await promptForGatewayOtp()))));
 
 server.registerTool('finish_gateway_password_reset', {
-  description: 'Reset the password only after code verification and explicit chat/native approval. Collect the new password in hidden macOS dialogs; no password or reset token enters the AI client.',
+  description: 'Reset the password only after code verification and explicit chat/native approval. Collect the new password in hidden native desktop dialogs; no password or reset token enters the AI client.',
   annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
 }, guarded(() => oneAccountWrite(async () => {
   const approved = await confirmGatewayAction({ kind: 'panel_action', preview: { action: 'finish_gateway_password_reset', details: { password: 'entered locally and hidden' } } });
@@ -242,7 +243,7 @@ server.registerTool('send_gateway_account_verification_code', {
 })));
 
 server.registerTool('verify_gateway_account_code', {
-  description: 'Verify the signed-in user’s WhatsApp phone-verification code through a hidden macOS dialog, without putting the code in the AI client.',
+  description: 'Verify the signed-in user’s WhatsApp phone-verification code through a hidden native desktop dialog, without putting the code in the AI client.',
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
 }, guarded(() => oneAccountWrite(async () => accessTokenProvider.verifyAccountCode(await promptForGatewayOtp()))));
 
@@ -300,7 +301,7 @@ server.registerTool('get_whatsapp_template', {
 }, guarded(({ appId, sourceId }) => gateway.getWhatsappTemplate(appId, sourceId)));
 
 server.registerTool('upload_whatsapp_template_media', {
-  description: 'Open a native macOS file picker; upload only the file selected by the developer to their owned WhatsApp application after exact native approval. The AI never chooses a filesystem path. Makes one request, with no automatic retry.',
+  description: 'Open a native desktop file picker; upload only the file selected by the developer to their owned WhatsApp application after exact native approval. The AI never chooses a filesystem path. Makes one request, with no automatic retry.',
   inputSchema: { appId: z.string().min(1).max(100) },
   annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
 }, guarded(({ appId }) => oneAccountWrite(async () => {
@@ -366,7 +367,7 @@ server.registerTool('get_insights_export_rows', {
 }, guarded((args) => gateway.getInsightsExport(args)));
 
 server.registerTool('save_insights_csv', {
-  description: 'Save the panel-format WhatsApp insights CSV after explicit user request. A native macOS save dialog chooses the destination; the AI never supplies a path. Existing files are not overwritten.',
+  description: 'Save the panel-format WhatsApp insights CSV after explicit user request. A native desktop save dialog chooses the destination; the AI never supplies a path. Existing files are not overwritten.',
   inputSchema: { startDate: z.iso.date(), endDate: z.iso.date(), appId: z.string().min(1).max(100).optional() },
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
 }, guarded((args) => saveInsightsCsv(gateway, args)));
@@ -417,11 +418,11 @@ server.registerTool('get_webhook_status', {
 }, guarded(({ appId }) => gateway.getWebhookStatus(appId)));
 
 server.registerTool('set_webhook_header', {
-  description: 'Set one custom header on an existing application webhook. The header value is collected in a hidden native macOS dialog, never in chat or tool arguments; existing headers are preserved. Requires explicit chat approval and native confirmation.',
+  description: 'Set one custom header on an existing application webhook. The header value is collected in a hidden native desktop dialog, never in chat or tool arguments; existing headers are preserved. Requires explicit chat approval and native confirmation.',
   inputSchema: { appId: z.string().min(1).max(100), headerName: z.string().regex(/^[A-Za-z][A-Za-z0-9-]{0,99}$/) },
   annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
 }, guarded(({ appId, headerName }) => oneAccountWrite(async () => {
-  if (process.platform !== 'darwin') throw new Error('Native webhook header entry currently supports macOS only');
+  if (!supportsNativeAccount) throw new Error('Native webhook header entry requires macOS or Windows');
   const prepared = await gateway.prepareWebhookHeaderUpdate(appId, headerName);
   const approved = await confirmGatewayAction({ kind: 'panel_action', preview: { action: 'set_webhook_header', details: prepared.preview } });
   if (!approved) return { status: 'cancelled', changed: false };
@@ -452,7 +453,7 @@ server.registerTool('prepare_sandbox_text', {
 }, guarded((args) => gateway.prepareSandboxText(args)));
 
 server.registerTool('add_sandbox_test_number', {
-  description: 'Add an E.164 sandbox test number to a selected application after an exact native macOS confirmation. The user must explicitly request adding it. Never use this tool for a different account or application.',
+  description: 'Add an E.164 sandbox test number to a selected application after an exact native desktop confirmation. The user must explicitly request adding it. Never use this tool for a different account or application.',
   inputSchema: {
     appId: z.string().min(1).max(100),
     phoneNumber: z.string().min(7).max(16),
@@ -462,7 +463,7 @@ server.registerTool('add_sandbox_test_number', {
 }, guarded((args) => oneAccountWrite(() => addSandboxTestNumber(gateway, confirmGatewayAction, args))));
 
 server.registerTool('send_sandbox_text', {
-  description: 'Make one real sandbox WhatsApp text send to a registered test number in the selected application, only after explicit user request and exact native macOS confirmation. Never retry automatically; an error may mean the outcome is unknown.',
+  description: 'Make one real sandbox WhatsApp text send to a registered test number in the selected application, only after explicit user request and exact native desktop confirmation. Never retry automatically; an error may mean the outcome is unknown.',
   inputSchema: {
     appId: z.string().min(1).max(100),
     testNumberId: z.uuid(),
@@ -483,7 +484,7 @@ server.registerTool('prepare_sandbox_template', {
 }, guarded((args) => gateway.prepareSandboxTemplate(args)));
 
 server.registerTool('send_sandbox_template', {
-  description: 'Make one real sandbox WhatsApp TEMPLATE send to a registered test number, only after explicit user approval of the preview and exact native macOS confirmation. Unsupported template components are blocked. Never retry automatically.',
+  description: 'Make one real sandbox WhatsApp TEMPLATE send to a registered test number, only after explicit user approval of the preview and exact native desktop confirmation. Unsupported template components are blocked. Never retry automatically.',
   inputSchema: {
     appId: z.string().min(1).max(100),
     testNumberId: z.uuid(),
@@ -546,14 +547,14 @@ const panelActionTools = [
 
 for (const [name, description, inputSchema, destructive] of panelActionTools) {
   server.registerTool(name, {
-    description: `${description} The user must approve the exact action in chat, then in a native macOS confirmation. Never retry automatically.`,
+    description: `${description} The user must approve the exact action in chat, then in a native desktop confirmation. Never retry automatically.`,
     inputSchema,
     annotations: { readOnlyHint: false, destructiveHint: destructive, idempotentHint: false },
   }, guarded((args) => oneAccountWrite(() => performPanelAction(gateway, confirmGatewayAction, name, args))));
 }
 
 server.registerTool('create_api_key', {
-  description: 'Create one application API key after explicit chat and native macOS approval. The new key is displayed only in a local macOS dialog and is never returned to the AI client. Never retry automatically.',
+  description: 'Create one application API key after explicit chat and native desktop approval. The new key is displayed only in a local native dialog and is never returned to the AI client. Never retry automatically.',
   inputSchema: {
     appId: z.string().min(1).max(100),
     name: z.string().min(1).max(100),
@@ -565,7 +566,7 @@ server.registerTool('create_api_key', {
 }, guarded((args) => oneAccountWrite(() => createApiKey(gateway, confirmGatewayAction, showGatewaySecret, args))));
 
 server.registerTool('create_organization_secret', {
-  description: 'Create one organization publishable or secret key after explicit chat and native approval. Plaintext is shown only in a local macOS dialog and never returned to the AI client. Never retry automatically.',
+  description: 'Create one organization publishable or secret key after explicit chat and native approval. Plaintext is shown only in a local native dialog and never returned to the AI client. Never retry automatically.',
   inputSchema: {
     name: z.string().min(1).max(100),
     type: z.enum(['PUBLISHABLE', 'SECRET']),

@@ -832,7 +832,7 @@ export class GatewayApiClient {
         if (typeof args.expiresAt !== 'string' || Number.isNaN(Date.parse(args.expiresAt)) || Date.parse(args.expiresAt) <= Date.now()) throw new Error('expiresAt must be a future timestamp');
         body.expiresAt = args.expiresAt;
       }
-      preview = { applicationId: args.appId, applicationName: app.displayName, create: { ...body, secretDisclosure: 'shown only in a local macOS dialog, never returned to the AI client' } };
+      preview = { applicationId: args.appId, applicationName: app.displayName, create: { ...body, secretDisclosure: 'shown only in a local native dialog, never returned to the AI client' } };
       request = { method: 'POST', path: `/applications/${encodeURIComponent(args.appId)}/api-keys`, body };
     } else if (action === 'create_organization_secret') {
       const name = assertNonEmptyString(args.name, 'name', 100);
@@ -843,7 +843,7 @@ export class GatewayApiClient {
       }
       const currentSecrets = await this.listOrganizationSecretsMetadata();
       const body = { name, type: args.type, expiresAt: args.expiresAt ?? null };
-      preview = { currentSecrets, create: { ...body, secretDisclosure: 'shown only in a local macOS dialog, never returned to the AI client' } };
+      preview = { currentSecrets, create: { ...body, secretDisclosure: 'shown only in a local native dialog, never returned to the AI client' } };
       request = { method: 'POST', path: '/organization-secrets', body };
     } else {
       throw new Error('Unsupported panel action');

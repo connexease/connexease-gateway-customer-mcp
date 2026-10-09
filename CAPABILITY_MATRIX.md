@@ -1,11 +1,11 @@
-# Gateway panel capability matrix (0.11.0)
+# Gateway panel capability matrix (0.12.0)
 
 Scope: the local Claude Code, Codex, and Gemini CLI packages run the same Connexease Gateway MCP server, which calls only existing API routes. Its tool inventory is not proof that every route is deployed in a particular environment. Automated HTTP-stub contract tests and MCP discovery run locally; account-specific writes below have not been executed against a live Gateway account in this version.
 
 | Panel area | Plugin capability | Boundary |
 | --- | --- | --- |
 | Public documentation | Live, read-only answers with verified official links through the `ask` skill; optional docs-only packages remain | No Gateway login needed; documentation content does not authorize account actions. New-version installs are not yet end-to-end verified |
-| Account | Sign in, sign out, register, change/reset password, phone-code verification, onboarding organization assignment, profile and organization reads | Passwords and codes use native macOS dialogs; signing out reports local Keychain cleanup and remote revocation separately |
+| Account | Sign in, sign out, register, change/reset password, phone-code verification, onboarding organization assignment, profile and organization reads | Passwords and codes use native macOS or Windows dialogs; signing out reports local Keychain or DPAPI-protected store cleanup and remote revocation separately |
 | Applications | List/detail, WhatsApp and Instagram health, WhatsApp business profile, Instagram profile, rename, contact update, WhatsApp username and suggestions | Mutations check application ownership and require native approval |
 | WhatsApp templates | Paginated list/detail, template library/search/filters/detail, create/update/delete, media upload via native file picker | Submission is not Meta approval; media handle is returned to Claude, but local file path is not an AI argument |
 | Sandbox | List/add/rename/delete test numbers; preview/send text or supported approved template; webhook test | Real sends are never automatic and have no automatic retry; product/carousel template sends are blocked |
@@ -21,5 +21,6 @@ Scope: the local Claude Code, Codex, and Gemini CLI packages run the same Connex
 - **Full template send coverage:** current sandbox API/request validation cannot safely provide catalog/product selections for single/multi-product and carousel templates. Those sends stay blocked. Template creation and update submission are available, subject to backend/Meta validation.
 - **Cross-AI web chat installation:** these packages use a local stdio MCP server. ChatGPT/Gemini/Claude browser chat needs a hosted HTTPS MCP service with per-user OAuth; packaging the same local code is insufficient.
 - **Live confidence:** registration, mutations, uploads, and payment-adjacent reads have local contract tests only. Verify against a dedicated staging account before promising production parity. Sandbox send success is Gateway acceptance, not delivery confirmation.
+- **Windows acceptance:** Windows-native dialogs and protected token storage have automated mock/static tests but have not yet been exercised on a real Windows desktop. Test sign-in, restart persistence, logout, confirmation cancellation, file picker, and CSV save on Windows before customer rollout.
 
 The plugin does not bypass existing API authorization or invent backend endpoints. If a route returns 404/422 in staging or production, treat that as an environment/API gap, not as a reason to call an undocumented endpoint.

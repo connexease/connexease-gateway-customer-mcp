@@ -1,8 +1,8 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "connexease-gateway-ops",
-  "version": "0.11.0",
-  "description": "Connexease Gateway documentation and account operations with local macOS confirmation.",
+  "version": "0.12.0",
+  "description": "Connexease Gateway documentation and account operations with local macOS or Windows confirmation.",
   "author": { "name": "Connexease" },
   "repository": "https://github.com/connexease/connexease-gateway-customer-mcp"
 }

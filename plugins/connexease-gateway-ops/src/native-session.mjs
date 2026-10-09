@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_API_BASE_URL, GatewayApiClient } from './gateway-api.mjs';
+import { promptWindowsAnswer, runWindowsNative } from './windows-native.mjs';
 
 const KEYCHAIN_SERVICE = 'com.connexease.gateway-ai-ops.refresh';
 const KEYCHAIN_ACCOUNT = 'default';
@@ -30,56 +31,61 @@ function runAppleScript(script) {
   });
 }
 
-/** Credentials are collected by macOS dialogs, not by an AI chat message. */
-export async function promptForGatewayCredentials({ execute = runAppleScript } = {}) {
-  if (process.platform !== 'darwin' && execute === runAppleScript) {
-    throw new Error('In-session sign-in currently supports macOS only');
-  }
-  const email = (await execute(EMAIL_DIALOG)).trim();
+function nativeAnswer(script, label, hidden, { execute, platform, windowsNative }) {
+  if (execute) return execute(script);
+  if (platform === 'darwin') return runAppleScript(script);
+  if (platform === 'win32') return promptWindowsAnswer(label, hidden, windowsNative ?? runWindowsNative);
+  throw new Error('Native Gateway dialogs require macOS or Windows');
+}
+
+/** Credentials are collected by local dialogs, not by an AI chat message. */
+export async function promptForGatewayCredentials({ execute, platform = process.platform, windowsNative } = {}) {
+  const options = { execute, platform, windowsNative };
+  const email = (await nativeAnswer(EMAIL_DIALOG, 'Connexease Gateway email address', false, options)).trim();
   if (!email.includes('@')) throw new Error('A valid Gateway email address is required');
-  const password = await execute(PASSWORD_DIALOG);
+  const password = await nativeAnswer(PASSWORD_DIALOG, 'Connexease Gateway password', true, options);
   if (!password) throw new Error('Gateway password is required');
   return { email, password };
 }
 
-export async function promptForGatewayRegistration({ execute = runAppleScript } = {}) {
-  if (process.platform !== 'darwin' && execute === runAppleScript) throw new Error('Native registration currently supports macOS only');
-  const firstName = (await execute(nativeAnswerPrompt('Gateway registration: first name'))).trim();
-  const lastName = (await execute(nativeAnswerPrompt('Gateway registration: last name'))).trim();
-  const email = (await execute(nativeAnswerPrompt('Gateway registration: email'))).trim();
-  const password = await execute(nativeAnswerPrompt('Gateway registration: password', true));
-  const confirmation = await execute(nativeAnswerPrompt('Gateway registration: confirm password', true));
+export async function promptForGatewayRegistration({ execute, platform = process.platform, windowsNative } = {}) {
+  const options = { execute, platform, windowsNative };
+  const ask = (label, hidden = false) => nativeAnswer(nativeAnswerPrompt(label, hidden), label, hidden, options);
+  const firstName = (await ask('Gateway registration: first name')).trim();
+  const lastName = (await ask('Gateway registration: last name')).trim();
+  const email = (await ask('Gateway registration: email')).trim();
+  const password = await ask('Gateway registration: password', true);
+  const confirmation = await ask('Gateway registration: confirm password', true);
   if (!firstName || !lastName || !email.includes('@') || !password || password !== confirmation) throw new Error('Registration details are incomplete or passwords do not match');
   return { firstName, lastName, email, password };
 }
 
-export async function promptForPasswordChange({ execute = runAppleScript } = {}) {
-  if (process.platform !== 'darwin' && execute === runAppleScript) throw new Error('Native password change currently supports macOS only');
-  const currentPassword = await execute(nativeAnswerPrompt('Gateway current password', true));
-  const newPassword = await execute(nativeAnswerPrompt('Gateway new password', true));
-  const confirmPassword = await execute(nativeAnswerPrompt('Confirm Gateway new password', true));
+export async function promptForPasswordChange({ execute, platform = process.platform, windowsNative } = {}) {
+  const options = { execute, platform, windowsNative };
+  const ask = (label) => nativeAnswer(nativeAnswerPrompt(label, true), label, true, options);
+  const currentPassword = await ask('Gateway current password');
+  const newPassword = await ask('Gateway new password');
+  const confirmPassword = await ask('Confirm Gateway new password');
   if (!currentPassword || !newPassword || newPassword !== confirmPassword) throw new Error('Password details are incomplete or do not match');
   return { currentPassword, newPassword, confirmPassword };
 }
 
-export async function promptForGatewayOtp({ execute = runAppleScript } = {}) {
-  if (process.platform !== 'darwin' && execute === runAppleScript) throw new Error('Native verification currently supports macOS only');
-  const code = (await execute(nativeAnswerPrompt('Gateway verification code', true))).trim();
+export async function promptForGatewayOtp({ execute, platform = process.platform, windowsNative } = {}) {
+  const code = (await nativeAnswer(nativeAnswerPrompt('Gateway verification code', true), 'Gateway verification code', true, { execute, platform, windowsNative })).trim();
   if (!/^\d{4,10}$/.test(code)) throw new Error('Gateway verification code is invalid');
   return code;
 }
 
-export async function promptForNewPassword({ execute = runAppleScript } = {}) {
-  if (process.platform !== 'darwin' && execute === runAppleScript) throw new Error('Native password reset currently supports macOS only');
-  const newPassword = await execute(nativeAnswerPrompt('Gateway new password', true));
-  const confirmPassword = await execute(nativeAnswerPrompt('Confirm Gateway new password', true));
+export async function promptForNewPassword({ execute, platform = process.platform, windowsNative } = {}) {
+  const options = { execute, platform, windowsNative };
+  const newPassword = await nativeAnswer(nativeAnswerPrompt('Gateway new password', true), 'Gateway new password', true, options);
+  const confirmPassword = await nativeAnswer(nativeAnswerPrompt('Confirm Gateway new password', true), 'Confirm Gateway new password', true, options);
   if (!newPassword || newPassword !== confirmPassword) throw new Error('New passwords do not match');
   return { newPassword, confirmPassword };
 }
 
-export async function promptForWebhookHeaderValue({ execute = runAppleScript } = {}) {
-  if (process.platform !== 'darwin' && execute === runAppleScript) throw new Error('Native webhook header entry currently supports macOS only');
-  const value = await execute(nativeAnswerPrompt('Gateway webhook header value', true));
+export async function promptForWebhookHeaderValue({ execute, platform = process.platform, windowsNative } = {}) {
+  const value = await nativeAnswer(nativeAnswerPrompt('Gateway webhook header value', true), 'Gateway webhook header value', true, { execute, platform, windowsNative });
   if (!value || value.length > 4096 || /[\r\n\0]/.test(value)) throw new Error('Webhook header value must be 1-4096 characters without line breaks');
   return value;
 }
@@ -153,6 +159,38 @@ export class MacKeychainStore {
   }
 }
 
+/** DPAPI CurrentUser protects the refresh token in the Windows user's AppData. */
+export class WindowsDpapiStore {
+  constructor({ execute = runWindowsNative, platform = process.platform } = {}) {
+    if (platform !== 'win32' && execute === runWindowsNative) throw new Error('Windows protected session storage requires Windows');
+    this.execute = execute;
+  }
+
+  async getRefreshToken() {
+    let token;
+    try { token = await this.execute('token-read'); } catch { /* No usable saved token. */ }
+    if (typeof token !== 'string' || !token) {
+      throw new Error('Gateway login required. Use the connect skill or call connect_gateway_account in this local AI client.');
+    }
+    return token;
+  }
+
+  async setRefreshToken(token) {
+    if (typeof token !== 'string' || !token || /[\r\n\0]/.test(token)) throw new Error('Invalid Gateway refresh token');
+    await this.execute('token-write', { token });
+  }
+
+  async deleteRefreshToken() {
+    await this.execute('token-delete');
+  }
+}
+
+function defaultSessionStore(platform) {
+  if (platform === 'darwin') return new MacKeychainStore();
+  if (platform === 'win32') return new WindowsDpapiStore();
+  throw new Error('Local Gateway account sessions require macOS or Windows');
+}
+
 async function postAuthData(path, body, fetchImpl, baseUrl, accessToken) {
   const endpoint = new URL(baseUrl);
   if (endpoint.protocol !== 'https:' || endpoint.username || endpoint.password || endpoint.search || endpoint.hash) {
@@ -222,8 +260,9 @@ export class NativeSession {
   #passwordResetToken = null;
   #signedOut = false;
 
-  constructor({ store = new MacKeychainStore(), fetchImpl = fetch, baseUrl = DEFAULT_API_BASE_URL } = {}) {
-    this.store = store;
+  constructor({ store, fetchImpl = fetch, baseUrl = DEFAULT_API_BASE_URL, platform = process.platform } = {}) {
+    this.platform = platform;
+    this.store = store ?? defaultSessionStore(platform);
     this.fetchImpl = fetchImpl;
     this.baseUrl = baseUrl;
   }
@@ -248,10 +287,10 @@ export class NativeSession {
     this.#passwordResetTarget = null;
     this.#passwordResetToken = null;
     this.#signedOut = true;
-    let keychainCleared = false;
+    let localSessionCleared = false;
     try {
       await this.store.deleteRefreshToken();
-      keychainCleared = true;
+      localSessionCleared = true;
     } catch {
       // Never claim logout succeeded when a refresh token may remain locally.
     }
@@ -265,10 +304,12 @@ export class NativeSession {
       }
     }
     return {
-      status: keychainCleared ? 'disconnected' : 'keychain_cleanup_failed',
-      keychainCleared,
+      status: localSessionCleared ? 'disconnected' : (this.platform === 'win32' ? 'windows_store_cleanup_failed' : 'keychain_cleanup_failed'),
+      ...(this.platform === 'win32' ? { windowsProtectedStoreCleared: localSessionCleared } : { keychainCleared: localSessionCleared }),
       gatewayRevoked,
-      ...(keychainCleared ? {} : { warning: 'A saved Gateway refresh token may remain in macOS Keychain. Remove it manually before closing this session.' }),
+      ...(localSessionCleared ? {} : { warning: this.platform === 'win32'
+        ? 'A saved Gateway refresh token may remain in Windows protected storage. Remove the Connexease GatewayAI session file from your local AppData before closing this session.'
+        : 'A saved Gateway refresh token may remain in macOS Keychain. Remove it manually before closing this session.' }),
     };
   }
 
@@ -368,13 +409,13 @@ export class NativeSession {
     this.#memoryRefreshToken = token;
     try {
       await this.store.setRefreshToken(token);
-      this.#sessionPersistence = 'keychain';
+      this.#sessionPersistence = this.platform === 'win32' ? 'windows_dpapi' : 'keychain';
     } catch {
       this.#sessionPersistence = 'memory_only';
-      // A failed overwrite can leave a previous account's token in Keychain.
+      // A failed overwrite can leave a previous account's token in the OS store.
       // Best effort cleanup prevents that account silently returning later.
       if (typeof this.store.deleteRefreshToken === 'function') {
-        try { await this.store.deleteRefreshToken(); } catch { this.#sessionPersistence = 'memory_only_stale_keychain_possible'; }
+        try { await this.store.deleteRefreshToken(); } catch { this.#sessionPersistence = 'memory_only_stale_secure_store_possible'; }
       }
     }
   }

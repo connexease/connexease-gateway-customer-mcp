@@ -37397,7 +37397,7 @@ var GatewayApiClient = class {
         if (typeof args.expiresAt !== "string" || Number.isNaN(Date.parse(args.expiresAt)) || Date.parse(args.expiresAt) <= Date.now()) throw new Error("expiresAt must be a future timestamp");
         body.expiresAt = args.expiresAt;
       }
-      preview = { applicationId: args.appId, applicationName: app.displayName, create: { ...body, secretDisclosure: "shown only in a local macOS dialog, never returned to the AI client" } };
+      preview = { applicationId: args.appId, applicationName: app.displayName, create: { ...body, secretDisclosure: "shown only in a local native dialog, never returned to the AI client" } };
       request = { method: "POST", path: `/applications/${encodeURIComponent(args.appId)}/api-keys`, body };
     } else if (action === "create_organization_secret") {
       const name = assertNonEmptyString(args.name, "name", 100);
@@ -37408,7 +37408,7 @@ var GatewayApiClient = class {
       }
       const currentSecrets = await this.listOrganizationSecretsMetadata();
       const body = { name, type: args.type, expiresAt: args.expiresAt ?? null };
-      preview = { currentSecrets, create: { ...body, secretDisclosure: "shown only in a local macOS dialog, never returned to the AI client" } };
+      preview = { currentSecrets, create: { ...body, secretDisclosure: "shown only in a local native dialog, never returned to the AI client" } };
       request = { method: "POST", path: "/organization-secrets", body };
     } else {
       throw new Error("Unsupported panel action");
@@ -37476,10 +37476,76 @@ import { writeFile } from "node:fs/promises";
 import { basename as basename2 } from "node:path";
 
 // src/native-file.mjs
+import { spawn as spawn2 } from "node:child_process";
+
+// src/windows-native.mjs
 import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { win32 } from "node:path";
+var WINDOWS_HELPER = fileURLToPath(new URL("../scripts/windows-native.ps1", import.meta.url));
+var ACTIONS = /* @__PURE__ */ new Set(["prompt", "confirm", "open-file", "save-file", "token-read", "token-write", "token-delete"]);
+var MAX_OUTPUT_BYTES = 1024 * 1024;
+function runWindowsNative(action, payload = {}, { spawnImpl = spawn, systemRoot = process.env.SystemRoot } = {}) {
+  if (!ACTIONS.has(action)) throw new Error("Unknown Windows native action");
+  if (!systemRoot || !win32.isAbsolute(systemRoot)) throw new Error("Windows system directory is unavailable");
+  const executable = win32.join(systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+  const args = ["-NoLogo", "-NoProfile", "-NonInteractive", "-Sta", "-ExecutionPolicy", "Bypass", "-File", WINDOWS_HELPER, "-Action", action];
+  return new Promise((resolve, reject) => {
+    const child = spawnImpl(executable, args, { stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
+    let output2 = "";
+    let size = 0;
+    let settled = false;
+    const fail = () => {
+      if (settled) return;
+      settled = true;
+      reject(new Error("Windows native dialog or protected session store is unavailable"));
+    };
+    child.stdout.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => {
+      size += Buffer.byteLength(chunk, "utf8");
+      if (size > MAX_OUTPUT_BYTES) {
+        child.kill();
+        fail();
+      } else output2 += chunk;
+    });
+    child.stderr.resume();
+    child.on("error", fail);
+    child.on("close", (code) => {
+      if (settled) return;
+      if (code !== 0) return fail();
+      try {
+        const response = JSON.parse(output2.trim());
+        if (response?.status === "ok") {
+          settled = true;
+          resolve(response.value ?? null);
+        } else if (response?.status === "cancelled" || response?.status === "missing") {
+          settled = true;
+          resolve(null);
+        } else fail();
+      } catch {
+        fail();
+      }
+    });
+    child.stdin.on("error", fail);
+    child.stdin.end(JSON.stringify(payload));
+  });
+}
+async function promptWindowsAnswer(label2, hidden = false, native = runWindowsNative) {
+  const value = await native("prompt", { label: label2, hidden });
+  if (value === null) throw new Error("Gateway native prompt cancelled");
+  if (typeof value !== "string") throw new Error("Gateway native prompt returned an invalid answer");
+  return value;
+}
+
+// src/native-file.mjs
 var PICK_FILE_SCRIPT = 'POSIX path of (choose file with prompt "Select one file to upload to your Connexease Gateway WhatsApp account")';
-function selectGatewayUploadFile(spawnImpl = spawn) {
-  if (process.platform !== "darwin" && spawnImpl === spawn) throw new Error("Native file selection currently supports macOS only");
+function selectGatewayUploadFile(spawnImpl = spawn2, { platform = process.platform, windowsNative = runWindowsNative } = {}) {
+  if (platform === "win32") return windowsNative("open-file").then((value) => {
+    if (value === null) return null;
+    if (typeof value !== "string" || !value) throw new Error("Windows file picker returned an invalid path");
+    return value;
+  });
+  if (platform !== "darwin" && spawnImpl === spawn2) throw new Error("Native file selection requires macOS or Windows");
   return new Promise((resolve, reject) => {
     const child = spawnImpl("/usr/bin/osascript", ["-e", PICK_FILE_SCRIPT], { stdio: ["ignore", "pipe", "pipe"] });
     let output2 = "";
@@ -37496,9 +37562,14 @@ function selectGatewayUploadFile(spawnImpl = spawn) {
     });
   });
 }
-function selectGatewayCsvDestination(filename, spawnImpl = spawn) {
+function selectGatewayCsvDestination(filename, spawnImpl = spawn2, { platform = process.platform, windowsNative = runWindowsNative } = {}) {
   if (!/^insights_\d{4}-\d{2}-\d{2}_\d{4}-\d{2}-\d{2}\.csv$/.test(filename)) throw new Error("Invalid insights CSV filename");
-  if (process.platform !== "darwin" && spawnImpl === spawn) throw new Error("Native CSV save currently supports macOS only");
+  if (platform === "win32") return windowsNative("save-file", { filename }).then((value) => {
+    if (value === null) return null;
+    if (typeof value !== "string" || !value) throw new Error("Windows save dialog returned an invalid path");
+    return value;
+  });
+  if (platform !== "darwin" && spawnImpl === spawn2) throw new Error("Native CSV save requires macOS or Windows");
   const script = `POSIX path of (choose file name with prompt "Save Connexease Gateway insights CSV" default name "${filename}")`;
   return new Promise((resolve, reject) => {
     const child = spawnImpl("/usr/bin/osascript", ["-e", script], { stdio: ["ignore", "pipe", "pipe"] });
@@ -38004,9 +38075,9 @@ B: ${b.startDate} to ${b.endDate} (${b.days} days)`,
 }
 
 // src/native-confirm.mjs
-import { spawn as spawn2 } from "node:child_process";
+import { spawn as spawn3 } from "node:child_process";
 var CONFIRM_SCRIPT = 'ObjC.import("Foundation"); var data = $.NSFileHandle.fileHandleWithStandardInput.readDataToEndOfFile; var payload = JSON.parse(ObjC.unwrap($.NSString.alloc.initWithDataEncoding(data, $.NSUTF8StringEncoding))); var app = Application.currentApplication(); app.includeStandardAdditions = true; var answer = app.displayDialog(payload.prompt, {defaultAnswer: payload.value, buttons: ["Cancel", payload.approveLabel], defaultButton: "Cancel", cancelButton: "Cancel"}); answer.buttonReturned === payload.approveLabel && answer.textReturned === payload.value ? "CONFIRMED" : "CANCELLED";';
-function runNativeConfirmation(payload, spawnImpl = spawn2) {
+function runNativeConfirmation(payload, spawnImpl = spawn3) {
   return new Promise((resolve, reject) => {
     const child = spawnImpl("/usr/bin/osascript", ["-l", "JavaScript", "-e", CONFIRM_SCRIPT], {
       stdio: ["pipe", "pipe", "pipe"]
@@ -38026,13 +38097,20 @@ function runNativeConfirmation(payload, spawnImpl = spawn2) {
     child.stdin.end(JSON.stringify(payload));
   });
 }
-async function confirmGatewayAction(action, { execute = runNativeConfirmation } = {}) {
-  if (process.platform !== "darwin" && execute === runNativeConfirmation) {
-    throw new Error("Sandbox writes currently require macOS confirmation");
-  }
+async function runWindowsConfirmation(payload, native = runWindowsNative) {
+  return await native("confirm", payload) === true;
+}
+function confirmationExecutor(execute, platform, windowsNative) {
+  if (execute) return execute;
+  if (platform === "darwin") return runNativeConfirmation;
+  if (platform === "win32") return (payload) => runWindowsConfirmation(payload, windowsNative ?? runWindowsNative);
+  throw new Error("Gateway actions require macOS or Windows native confirmation");
+}
+async function confirmGatewayAction(action, { execute, platform = process.platform, windowsNative } = {}) {
+  const confirm = confirmationExecutor(execute, platform, windowsNative);
   if (action.kind === "add_test_number") {
     const { applicationId, phoneNumber, title } = action.preview;
-    return execute({
+    return confirm({
       prompt: `Add a REAL sandbox test number?
 Application: ${applicationId}
 Label: ${title ?? "(default)"}
@@ -38044,7 +38122,7 @@ Only add a number you are authorized to message. Review the phone number below a
   if (action.kind === "send_sandbox_text") {
     const { applicationId, phoneNumber, testNumber, message } = action.preview;
     const safeLabel = String(testNumber).replace(/[\x00-\x1f\x7f]/g, " ").slice(0, 100);
-    return execute({
+    return confirm({
       prompt: `Send ONE REAL sandbox WhatsApp message?
 Application: ${applicationId}
 Recipient: ${safeLabel} (${phoneNumber})
@@ -38066,7 +38144,7 @@ Review the exact message below. Send makes one request; delivery is not guarante
       components: template.components,
       parameters
     }, null, 2);
-    return execute({
+    return confirm({
       prompt: `Send ONE REAL sandbox WhatsApp TEMPLATE message?
 Application: ${applicationId}
 Recipient: ${safeLabel} (${phoneNumber})
@@ -38079,7 +38157,7 @@ Review the exact template and parameters below. Send makes one request; delivery
   if (action.kind === "panel_action") {
     const review = JSON.stringify(action.preview.details, null, 2);
     const safeAction = String(action.preview.action).replace(/[^a-z_]/g, "").slice(0, 60);
-    return execute({
+    return confirm({
       prompt: `Perform ONE REAL Gateway panel action: ${safeAction}?
 Review the exact before/after details below. This changes your live account. An uncertain result must be checked in the panel before any retry.`,
       value: review,
@@ -38088,11 +38166,9 @@ Review the exact before/after details below. This changes your live account. An 
   }
   throw new Error("Unknown Gateway confirmation action");
 }
-async function showGatewaySecret({ label: label2, secret }, { execute = runNativeConfirmation } = {}) {
-  if (process.platform !== "darwin" && execute === runNativeConfirmation) {
-    throw new Error("Secret disclosure currently requires macOS");
-  }
-  return execute({
+async function showGatewaySecret({ label: label2, secret }, { execute, platform = process.platform, windowsNative } = {}) {
+  const confirm = confirmationExecutor(execute, platform, windowsNative);
+  return confirm({
     prompt: `${String(label2).replace(/[\x00-\x1f\x7f]/g, " ").slice(0, 100)} was created. Copy the secret below now. Do not paste it into any AI chat or issue. You can also manage this credential in Gateway panel.`,
     value: secret,
     approveLabel: "Done"
@@ -38100,11 +38176,11 @@ async function showGatewaySecret({ label: label2, secret }, { execute = runNativ
 }
 
 // src/native-session.mjs
-import { spawn as spawn3 } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { spawn as spawn4 } from "node:child_process";
+import { fileURLToPath as fileURLToPath2 } from "node:url";
 var KEYCHAIN_SERVICE = "com.connexease.gateway-ai-ops.refresh";
 var KEYCHAIN_ACCOUNT = "default";
-var KEYCHAIN_WRITE_HELPER = fileURLToPath(new URL("../scripts/keychain-write.exp", import.meta.url));
+var KEYCHAIN_WRITE_HELPER = fileURLToPath2(new URL("../scripts/keychain-write.exp", import.meta.url));
 var EMAIL_DIALOG = 'var app = Application.currentApplication(); app.includeStandardAdditions = true; app.displayDialog("Connexease Gateway email address", {defaultAnswer: "", buttons: ["Cancel", "Next"], defaultButton: "Next"}).textReturned';
 var PASSWORD_DIALOG = 'var app = Application.currentApplication(); app.includeStandardAdditions = true; app.displayDialog("Connexease Gateway password", {defaultAnswer: "", buttons: ["Cancel", "Connect"], defaultButton: "Connect", hiddenAnswer: true}).textReturned';
 function nativeAnswerPrompt(label2, hidden = false) {
@@ -38112,7 +38188,7 @@ function nativeAnswerPrompt(label2, hidden = false) {
 }
 function runAppleScript(script) {
   return new Promise((resolve, reject) => {
-    const child = spawn3("/usr/bin/osascript", ["-l", "JavaScript", "-e", script], { stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn4("/usr/bin/osascript", ["-l", "JavaScript", "-e", script], { stdio: ["ignore", "pipe", "pipe"] });
     let output2 = "";
     child.stdout.setEncoding("utf8");
     child.stdout.on("data", (chunk) => {
@@ -38126,54 +38202,58 @@ function runAppleScript(script) {
     });
   });
 }
-async function promptForGatewayCredentials({ execute = runAppleScript } = {}) {
-  if (process.platform !== "darwin" && execute === runAppleScript) {
-    throw new Error("In-session sign-in currently supports macOS only");
-  }
-  const email3 = (await execute(EMAIL_DIALOG)).trim();
+function nativeAnswer(script, label2, hidden, { execute, platform, windowsNative }) {
+  if (execute) return execute(script);
+  if (platform === "darwin") return runAppleScript(script);
+  if (platform === "win32") return promptWindowsAnswer(label2, hidden, windowsNative ?? runWindowsNative);
+  throw new Error("Native Gateway dialogs require macOS or Windows");
+}
+async function promptForGatewayCredentials({ execute, platform = process.platform, windowsNative } = {}) {
+  const options = { execute, platform, windowsNative };
+  const email3 = (await nativeAnswer(EMAIL_DIALOG, "Connexease Gateway email address", false, options)).trim();
   if (!email3.includes("@")) throw new Error("A valid Gateway email address is required");
-  const password = await execute(PASSWORD_DIALOG);
+  const password = await nativeAnswer(PASSWORD_DIALOG, "Connexease Gateway password", true, options);
   if (!password) throw new Error("Gateway password is required");
   return { email: email3, password };
 }
-async function promptForGatewayRegistration({ execute = runAppleScript } = {}) {
-  if (process.platform !== "darwin" && execute === runAppleScript) throw new Error("Native registration currently supports macOS only");
-  const firstName = (await execute(nativeAnswerPrompt("Gateway registration: first name"))).trim();
-  const lastName = (await execute(nativeAnswerPrompt("Gateway registration: last name"))).trim();
-  const email3 = (await execute(nativeAnswerPrompt("Gateway registration: email"))).trim();
-  const password = await execute(nativeAnswerPrompt("Gateway registration: password", true));
-  const confirmation = await execute(nativeAnswerPrompt("Gateway registration: confirm password", true));
+async function promptForGatewayRegistration({ execute, platform = process.platform, windowsNative } = {}) {
+  const options = { execute, platform, windowsNative };
+  const ask = (label2, hidden = false) => nativeAnswer(nativeAnswerPrompt(label2, hidden), label2, hidden, options);
+  const firstName = (await ask("Gateway registration: first name")).trim();
+  const lastName = (await ask("Gateway registration: last name")).trim();
+  const email3 = (await ask("Gateway registration: email")).trim();
+  const password = await ask("Gateway registration: password", true);
+  const confirmation = await ask("Gateway registration: confirm password", true);
   if (!firstName || !lastName || !email3.includes("@") || !password || password !== confirmation) throw new Error("Registration details are incomplete or passwords do not match");
   return { firstName, lastName, email: email3, password };
 }
-async function promptForPasswordChange({ execute = runAppleScript } = {}) {
-  if (process.platform !== "darwin" && execute === runAppleScript) throw new Error("Native password change currently supports macOS only");
-  const currentPassword = await execute(nativeAnswerPrompt("Gateway current password", true));
-  const newPassword = await execute(nativeAnswerPrompt("Gateway new password", true));
-  const confirmPassword = await execute(nativeAnswerPrompt("Confirm Gateway new password", true));
+async function promptForPasswordChange({ execute, platform = process.platform, windowsNative } = {}) {
+  const options = { execute, platform, windowsNative };
+  const ask = (label2) => nativeAnswer(nativeAnswerPrompt(label2, true), label2, true, options);
+  const currentPassword = await ask("Gateway current password");
+  const newPassword = await ask("Gateway new password");
+  const confirmPassword = await ask("Confirm Gateway new password");
   if (!currentPassword || !newPassword || newPassword !== confirmPassword) throw new Error("Password details are incomplete or do not match");
   return { currentPassword, newPassword, confirmPassword };
 }
-async function promptForGatewayOtp({ execute = runAppleScript } = {}) {
-  if (process.platform !== "darwin" && execute === runAppleScript) throw new Error("Native verification currently supports macOS only");
-  const code = (await execute(nativeAnswerPrompt("Gateway verification code", true))).trim();
+async function promptForGatewayOtp({ execute, platform = process.platform, windowsNative } = {}) {
+  const code = (await nativeAnswer(nativeAnswerPrompt("Gateway verification code", true), "Gateway verification code", true, { execute, platform, windowsNative })).trim();
   if (!/^\d{4,10}$/.test(code)) throw new Error("Gateway verification code is invalid");
   return code;
 }
-async function promptForNewPassword({ execute = runAppleScript } = {}) {
-  if (process.platform !== "darwin" && execute === runAppleScript) throw new Error("Native password reset currently supports macOS only");
-  const newPassword = await execute(nativeAnswerPrompt("Gateway new password", true));
-  const confirmPassword = await execute(nativeAnswerPrompt("Confirm Gateway new password", true));
+async function promptForNewPassword({ execute, platform = process.platform, windowsNative } = {}) {
+  const options = { execute, platform, windowsNative };
+  const newPassword = await nativeAnswer(nativeAnswerPrompt("Gateway new password", true), "Gateway new password", true, options);
+  const confirmPassword = await nativeAnswer(nativeAnswerPrompt("Confirm Gateway new password", true), "Confirm Gateway new password", true, options);
   if (!newPassword || newPassword !== confirmPassword) throw new Error("New passwords do not match");
   return { newPassword, confirmPassword };
 }
-async function promptForWebhookHeaderValue({ execute = runAppleScript } = {}) {
-  if (process.platform !== "darwin" && execute === runAppleScript) throw new Error("Native webhook header entry currently supports macOS only");
-  const value = await execute(nativeAnswerPrompt("Gateway webhook header value", true));
+async function promptForWebhookHeaderValue({ execute, platform = process.platform, windowsNative } = {}) {
+  const value = await nativeAnswer(nativeAnswerPrompt("Gateway webhook header value", true), "Gateway webhook header value", true, { execute, platform, windowsNative });
   if (!value || value.length > 4096 || /[\r\n\0]/.test(value)) throw new Error("Webhook header value must be 1-4096 characters without line breaks");
   return value;
 }
-function runSecurity(args, input2, spawnImpl = spawn3) {
+function runSecurity(args, input2, spawnImpl = spawn4) {
   return new Promise((resolve, reject) => {
     const isWrite = input2 !== void 0;
     if (isWrite && args.at(-1) !== "-w") {
@@ -38242,6 +38322,35 @@ var MacKeychainStore = class {
     }
   }
 };
+var WindowsDpapiStore = class {
+  constructor({ execute = runWindowsNative, platform = process.platform } = {}) {
+    if (platform !== "win32" && execute === runWindowsNative) throw new Error("Windows protected session storage requires Windows");
+    this.execute = execute;
+  }
+  async getRefreshToken() {
+    let token;
+    try {
+      token = await this.execute("token-read");
+    } catch {
+    }
+    if (typeof token !== "string" || !token) {
+      throw new Error("Gateway login required. Use the connect skill or call connect_gateway_account in this local AI client.");
+    }
+    return token;
+  }
+  async setRefreshToken(token) {
+    if (typeof token !== "string" || !token || /[\r\n\0]/.test(token)) throw new Error("Invalid Gateway refresh token");
+    await this.execute("token-write", { token });
+  }
+  async deleteRefreshToken() {
+    await this.execute("token-delete");
+  }
+};
+function defaultSessionStore(platform) {
+  if (platform === "darwin") return new MacKeychainStore();
+  if (platform === "win32") return new WindowsDpapiStore();
+  throw new Error("Local Gateway account sessions require macOS or Windows");
+}
 async function postAuthData(path, body, fetchImpl, baseUrl, accessToken) {
   const endpoint = new URL(baseUrl);
   if (endpoint.protocol !== "https:" || endpoint.username || endpoint.password || endpoint.search || endpoint.hash) {
@@ -38306,8 +38415,9 @@ var NativeSession = class {
   #passwordResetTarget = null;
   #passwordResetToken = null;
   #signedOut = false;
-  constructor({ store = new MacKeychainStore(), fetchImpl = fetch, baseUrl = DEFAULT_API_BASE_URL } = {}) {
-    this.store = store;
+  constructor({ store, fetchImpl = fetch, baseUrl = DEFAULT_API_BASE_URL, platform = process.platform } = {}) {
+    this.platform = platform;
+    this.store = store ?? defaultSessionStore(platform);
     this.fetchImpl = fetchImpl;
     this.baseUrl = baseUrl;
   }
@@ -38336,10 +38446,10 @@ var NativeSession = class {
     this.#passwordResetTarget = null;
     this.#passwordResetToken = null;
     this.#signedOut = true;
-    let keychainCleared = false;
+    let localSessionCleared = false;
     try {
       await this.store.deleteRefreshToken();
-      keychainCleared = true;
+      localSessionCleared = true;
     } catch {
     }
     let gatewayRevoked = false;
@@ -38351,10 +38461,10 @@ var NativeSession = class {
       }
     }
     return {
-      status: keychainCleared ? "disconnected" : "keychain_cleanup_failed",
-      keychainCleared,
+      status: localSessionCleared ? "disconnected" : this.platform === "win32" ? "windows_store_cleanup_failed" : "keychain_cleanup_failed",
+      ...this.platform === "win32" ? { windowsProtectedStoreCleared: localSessionCleared } : { keychainCleared: localSessionCleared },
       gatewayRevoked,
-      ...keychainCleared ? {} : { warning: "A saved Gateway refresh token may remain in macOS Keychain. Remove it manually before closing this session." }
+      ...localSessionCleared ? {} : { warning: this.platform === "win32" ? "A saved Gateway refresh token may remain in Windows protected storage. Remove the Connexease GatewayAI session file from your local AppData before closing this session." : "A saved Gateway refresh token may remain in macOS Keychain. Remove it manually before closing this session." }
     };
   }
   async registerWithCredentials(registration) {
@@ -38456,14 +38566,14 @@ var NativeSession = class {
     this.#memoryRefreshToken = token;
     try {
       await this.store.setRefreshToken(token);
-      this.#sessionPersistence = "keychain";
+      this.#sessionPersistence = this.platform === "win32" ? "windows_dpapi" : "keychain";
     } catch {
       this.#sessionPersistence = "memory_only";
       if (typeof this.store.deleteRefreshToken === "function") {
         try {
           await this.store.deleteRefreshToken();
         } catch {
-          this.#sessionPersistence = "memory_only_stale_keychain_possible";
+          this.#sessionPersistence = "memory_only_stale_secure_store_possible";
         }
       }
     }
@@ -38551,11 +38661,12 @@ function toolResult(value) {
 }
 
 // src/server.mjs
-var accessTokenProvider = process.platform === "darwin" ? new NativeSession() : { getAccessToken: async () => {
-  throw new Error("Local account connection currently supports macOS only");
+var supportsNativeAccount = process.platform === "darwin" || process.platform === "win32";
+var accessTokenProvider = supportsNativeAccount ? new NativeSession() : { getAccessToken: async () => {
+  throw new Error("Local account connection requires macOS or Windows");
 } };
 var gateway = new GatewayApiClient({ accessTokenProvider });
-var server = new McpServer({ name: "connexease-gateway-ops", version: "0.11.0" });
+var server = new McpServer({ name: "connexease-gateway-ops", version: "0.12.0" });
 var signInInProgress = false;
 var accountWriteInProgress = false;
 var templateParametersSchema = external_exports.object({
@@ -38654,10 +38765,10 @@ server.registerTool("get_my_profile", {
   annotations: { readOnlyHint: true }
 }, guarded(() => gateway.getMyProfile()));
 server.registerTool("connect_gateway_account", {
-  description: "Open native macOS email/password dialogs to sign in to a Gateway account chosen by the user. Do not compare its email with a computer or repository identity. Never ask for credentials in chat or tool arguments. Only call after the user explicitly requests or accepts account connection.",
+  description: "Open native macOS or Windows email/password dialogs to sign in to a Gateway account chosen by the user. Do not compare its email with a computer or repository identity. Never ask for credentials in chat or tool arguments. Only call after the user explicitly requests or accepts account connection.",
   annotations: { readOnlyHint: false, destructiveHint: false }
 }, guarded(async () => {
-  if (process.platform !== "darwin") throw new Error("In-session sign-in currently supports macOS only");
+  if (!supportsNativeAccount) throw new Error("In-session sign-in requires macOS or Windows");
   if (signInInProgress) throw new Error("Gateway sign-in is already in progress");
   signInInProgress = true;
   try {
@@ -38668,26 +38779,26 @@ server.registerTool("connect_gateway_account", {
       id: profile.id,
       email: profile.email,
       sessionPersistence: profile.sessionPersistence,
-      ...profile.sessionPersistence !== "keychain" ? { warning: profile.sessionPersistence === "memory_only_stale_keychain_possible" ? "Keychain save and old-token cleanup failed. This Gateway session works only in memory; an older account may return after restart. Remove the Connexease Gateway item from macOS Keychain before restarting." : "Keychain save failed. This Gateway session works only while this AI client session remains open." } : {}
+      ...!["keychain", "windows_dpapi"].includes(profile.sessionPersistence) ? { warning: profile.sessionPersistence === "memory_only_stale_secure_store_possible" ? "Secure session storage and old-token cleanup failed. This Gateway session works only in memory; an older account may return after restart. Clear the old Connexease Gateway item from the local OS secure store before restarting." : "Secure session storage failed. This Gateway session works only while this AI client session remains open." } : {}
     };
   } finally {
     signInInProgress = false;
   }
 }));
 server.registerTool("disconnect_gateway_account", {
-  description: "Sign out of the current Gateway account and clear its local session. Requires explicit user request and native confirmation. If Keychain cleanup or server revocation fails, reports that separately.",
+  description: "Sign out of the current Gateway account and clear its local secure session. Requires explicit user request and native confirmation. If local cleanup or server revocation fails, reports that separately.",
   annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false }
 }, guarded(() => oneAccountWrite(async () => {
-  if (process.platform !== "darwin") throw new Error("Local account disconnection currently supports macOS only");
-  const approved = await confirmGatewayAction({ kind: "panel_action", preview: { action: "disconnect_gateway_account", details: { scope: "current Gateway session and local Keychain item" } } });
+  if (!supportsNativeAccount) throw new Error("Local account disconnection requires macOS or Windows");
+  const approved = await confirmGatewayAction({ kind: "panel_action", preview: { action: "disconnect_gateway_account", details: { scope: "current Gateway session and local secure-store item" } } });
   if (!approved) return { status: "cancelled", disconnected: false };
   return accessTokenProvider.disconnect();
 })));
 server.registerTool("register_gateway_account", {
-  description: "Create a new Gateway account only after explicit user request. Collect name, email and password in native macOS dialogs, then require a separate native creation confirmation. Credentials never enter AI tool arguments or results.",
+  description: "Create a new Gateway account only after explicit user request. Collect name, email and password in native desktop dialogs, then require a separate native creation confirmation. Credentials never enter AI tool arguments or results.",
   annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false }
 }, guarded(() => oneAccountWrite(async () => {
-  if (process.platform !== "darwin") throw new Error("Native registration currently supports macOS only");
+  if (!supportsNativeAccount) throw new Error("Native registration requires macOS or Windows");
   if (signInInProgress) throw new Error("Gateway sign-in or registration is already in progress");
   signInInProgress = true;
   try {
@@ -38704,10 +38815,10 @@ server.registerTool("register_gateway_account", {
   }
 })));
 server.registerTool("change_gateway_password", {
-  description: "Change the signed-in Gateway password only after explicit user request and native macOS confirmation. Current and new passwords are collected in hidden native dialogs, never in AI tool arguments or results.",
+  description: "Change the signed-in Gateway password only after explicit user request and native desktop confirmation. Current and new passwords are collected in hidden native dialogs, never in AI tool arguments or results.",
   annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false }
 }, guarded(() => oneAccountWrite(async () => {
-  if (process.platform !== "darwin") throw new Error("Native password change currently supports macOS only");
+  if (!supportsNativeAccount) throw new Error("Native password change requires macOS or Windows");
   const profile = await gateway.getMyProfile();
   const approved = await confirmGatewayAction({ kind: "panel_action", preview: {
     action: "change_gateway_password",
@@ -38743,11 +38854,11 @@ server.registerTool("start_gateway_password_reset", {
   return accessTokenProvider.startPasswordReset(target);
 })));
 server.registerTool("verify_gateway_password_reset_code", {
-  description: "Verify the password-reset code in a hidden macOS dialog. The code and single-use reset token are never returned to the AI client.",
+  description: "Verify the password-reset code in a hidden native desktop dialog. The code and single-use reset token are never returned to the AI client.",
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false }
 }, guarded(() => oneAccountWrite(async () => accessTokenProvider.verifyPasswordResetCode(await promptForGatewayOtp()))));
 server.registerTool("finish_gateway_password_reset", {
-  description: "Reset the password only after code verification and explicit chat/native approval. Collect the new password in hidden macOS dialogs; no password or reset token enters the AI client.",
+  description: "Reset the password only after code verification and explicit chat/native approval. Collect the new password in hidden native desktop dialogs; no password or reset token enters the AI client.",
   annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false }
 }, guarded(() => oneAccountWrite(async () => {
   const approved = await confirmGatewayAction({ kind: "panel_action", preview: { action: "finish_gateway_password_reset", details: { password: "entered locally and hidden" } } });
@@ -38764,7 +38875,7 @@ server.registerTool("send_gateway_account_verification_code", {
   return accessTokenProvider.sendAccountVerificationCode(target);
 })));
 server.registerTool("verify_gateway_account_code", {
-  description: "Verify the signed-in user\u2019s WhatsApp phone-verification code through a hidden macOS dialog, without putting the code in the AI client.",
+  description: "Verify the signed-in user\u2019s WhatsApp phone-verification code through a hidden native desktop dialog, without putting the code in the AI client.",
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false }
 }, guarded(() => oneAccountWrite(async () => accessTokenProvider.verifyAccountCode(await promptForGatewayOtp()))));
 server.registerTool("list_my_applications", {
@@ -38815,7 +38926,7 @@ server.registerTool("get_whatsapp_template", {
   annotations: { readOnlyHint: true }
 }, guarded(({ appId, sourceId }) => gateway.getWhatsappTemplate(appId, sourceId)));
 server.registerTool("upload_whatsapp_template_media", {
-  description: "Open a native macOS file picker; upload only the file selected by the developer to their owned WhatsApp application after exact native approval. The AI never chooses a filesystem path. Makes one request, with no automatic retry.",
+  description: "Open a native desktop file picker; upload only the file selected by the developer to their owned WhatsApp application after exact native approval. The AI never chooses a filesystem path. Makes one request, with no automatic retry.",
   inputSchema: { appId: external_exports.string().min(1).max(100) },
   annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false }
 }, guarded(({ appId }) => oneAccountWrite(async () => {
@@ -38879,7 +38990,7 @@ server.registerTool("get_insights_export_rows", {
   annotations: { readOnlyHint: true }
 }, guarded((args) => gateway.getInsightsExport(args)));
 server.registerTool("save_insights_csv", {
-  description: "Save the panel-format WhatsApp insights CSV after explicit user request. A native macOS save dialog chooses the destination; the AI never supplies a path. Existing files are not overwritten.",
+  description: "Save the panel-format WhatsApp insights CSV after explicit user request. A native desktop save dialog chooses the destination; the AI never supplies a path. Existing files are not overwritten.",
   inputSchema: { startDate: external_exports.iso.date(), endDate: external_exports.iso.date(), appId: external_exports.string().min(1).max(100).optional() },
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false }
 }, guarded((args) => saveInsightsCsv(gateway, args)));
@@ -38923,11 +39034,11 @@ server.registerTool("get_webhook_status", {
   annotations: { readOnlyHint: true }
 }, guarded(({ appId }) => gateway.getWebhookStatus(appId)));
 server.registerTool("set_webhook_header", {
-  description: "Set one custom header on an existing application webhook. The header value is collected in a hidden native macOS dialog, never in chat or tool arguments; existing headers are preserved. Requires explicit chat approval and native confirmation.",
+  description: "Set one custom header on an existing application webhook. The header value is collected in a hidden native desktop dialog, never in chat or tool arguments; existing headers are preserved. Requires explicit chat approval and native confirmation.",
   inputSchema: { appId: external_exports.string().min(1).max(100), headerName: external_exports.string().regex(/^[A-Za-z][A-Za-z0-9-]{0,99}$/) },
   annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false }
 }, guarded(({ appId, headerName }) => oneAccountWrite(async () => {
-  if (process.platform !== "darwin") throw new Error("Native webhook header entry currently supports macOS only");
+  if (!supportsNativeAccount) throw new Error("Native webhook header entry requires macOS or Windows");
   const prepared = await gateway.prepareWebhookHeaderUpdate(appId, headerName);
   const approved = await confirmGatewayAction({ kind: "panel_action", preview: { action: "set_webhook_header", details: prepared.preview } });
   if (!approved) return { status: "cancelled", changed: false };
@@ -38954,7 +39065,7 @@ server.registerTool("prepare_sandbox_text", {
   annotations: { readOnlyHint: true }
 }, guarded((args) => gateway.prepareSandboxText(args)));
 server.registerTool("add_sandbox_test_number", {
-  description: "Add an E.164 sandbox test number to a selected application after an exact native macOS confirmation. The user must explicitly request adding it. Never use this tool for a different account or application.",
+  description: "Add an E.164 sandbox test number to a selected application after an exact native desktop confirmation. The user must explicitly request adding it. Never use this tool for a different account or application.",
   inputSchema: {
     appId: external_exports.string().min(1).max(100),
     phoneNumber: external_exports.string().min(7).max(16),
@@ -38963,7 +39074,7 @@ server.registerTool("add_sandbox_test_number", {
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false }
 }, guarded((args) => oneAccountWrite(() => addSandboxTestNumber(gateway, confirmGatewayAction, args))));
 server.registerTool("send_sandbox_text", {
-  description: "Make one real sandbox WhatsApp text send to a registered test number in the selected application, only after explicit user request and exact native macOS confirmation. Never retry automatically; an error may mean the outcome is unknown.",
+  description: "Make one real sandbox WhatsApp text send to a registered test number in the selected application, only after explicit user request and exact native desktop confirmation. Never retry automatically; an error may mean the outcome is unknown.",
   inputSchema: {
     appId: external_exports.string().min(1).max(100),
     testNumberId: external_exports.uuid(),
@@ -38982,7 +39093,7 @@ server.registerTool("prepare_sandbox_template", {
   annotations: { readOnlyHint: true }
 }, guarded((args) => gateway.prepareSandboxTemplate(args)));
 server.registerTool("send_sandbox_template", {
-  description: "Make one real sandbox WhatsApp TEMPLATE send to a registered test number, only after explicit user approval of the preview and exact native macOS confirmation. Unsupported template components are blocked. Never retry automatically.",
+  description: "Make one real sandbox WhatsApp TEMPLATE send to a registered test number, only after explicit user approval of the preview and exact native desktop confirmation. Unsupported template components are blocked. Never retry automatically.",
   inputSchema: {
     appId: external_exports.string().min(1).max(100),
     testNumberId: external_exports.uuid(),
@@ -39062,13 +39173,13 @@ var panelActionTools = [
 ];
 for (const [name, description, inputSchema, destructive] of panelActionTools) {
   server.registerTool(name, {
-    description: `${description} The user must approve the exact action in chat, then in a native macOS confirmation. Never retry automatically.`,
+    description: `${description} The user must approve the exact action in chat, then in a native desktop confirmation. Never retry automatically.`,
     inputSchema,
     annotations: { readOnlyHint: false, destructiveHint: destructive, idempotentHint: false }
   }, guarded((args) => oneAccountWrite(() => performPanelAction(gateway, confirmGatewayAction, name, args))));
 }
 server.registerTool("create_api_key", {
-  description: "Create one application API key after explicit chat and native macOS approval. The new key is displayed only in a local macOS dialog and is never returned to the AI client. Never retry automatically.",
+  description: "Create one application API key after explicit chat and native desktop approval. The new key is displayed only in a local native dialog and is never returned to the AI client. Never retry automatically.",
   inputSchema: {
     appId: external_exports.string().min(1).max(100),
     name: external_exports.string().min(1).max(100),
@@ -39079,7 +39190,7 @@ server.registerTool("create_api_key", {
   annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false }
 }, guarded((args) => oneAccountWrite(() => createApiKey(gateway, confirmGatewayAction, showGatewaySecret, args))));
 server.registerTool("create_organization_secret", {
-  description: "Create one organization publishable or secret key after explicit chat and native approval. Plaintext is shown only in a local macOS dialog and never returned to the AI client. Never retry automatically.",
+  description: "Create one organization publishable or secret key after explicit chat and native approval. Plaintext is shown only in a local native dialog and never returned to the AI client. Never retry automatically.",
   inputSchema: {
     name: external_exports.string().min(1).max(100),
     type: external_exports.enum(["PUBLISHABLE", "SECRET"]),

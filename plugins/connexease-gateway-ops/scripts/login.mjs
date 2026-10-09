@@ -1,6 +1,6 @@
 import readline from 'node:readline/promises';
 import { GatewayApiClient, DEFAULT_API_BASE_URL } from '../src/gateway-api.mjs';
-import { loginWithPassword, MacKeychainStore } from '../src/native-session.mjs';
+import { loginWithPassword, MacKeychainStore, WindowsDpapiStore } from '../src/native-session.mjs';
 
 async function hiddenInput(label) {
   if (!process.stdin.isTTY || !process.stdin.setRawMode) {
@@ -37,8 +37,8 @@ async function hiddenInput(label) {
   }
 }
 
-if (process.platform !== 'darwin') {
-  throw new Error('This local login command currently supports macOS only');
+if (!['darwin', 'win32'].includes(process.platform)) {
+  throw new Error('This local login command requires macOS or Windows');
 }
 
 process.stdout.write(`Connexease Gateway login: ${new URL(DEFAULT_API_BASE_URL).origin}\n`);
@@ -49,14 +49,14 @@ prompt.close();
 const password = await hiddenInput('Password (hidden): ');
 
 try {
-  const store = new MacKeychainStore();
+  const store = process.platform === 'win32' ? new WindowsDpapiStore() : new MacKeychainStore();
   const session = await loginWithPassword({ email, password });
   const gateway = new GatewayApiClient({
     accessTokenProvider: { getAccessToken: async () => session.accessToken },
   });
   const profile = await gateway.getMyProfile();
   await store.setRefreshToken(session.refreshToken);
-  process.stdout.write(`Connected as ${profile.email}. Refresh token stored in macOS Keychain.\n`);
+  process.stdout.write(`Connected as ${profile.email}. Refresh token stored in ${process.platform === 'win32' ? 'Windows user-protected storage' : 'macOS Keychain'}.\n`);
 } catch (error) {
   process.stderr.write(`${error instanceof Error ? error.message : 'Login failed'}\n`);
   process.exitCode = 1;
