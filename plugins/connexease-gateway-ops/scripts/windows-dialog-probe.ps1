@@ -17,9 +17,12 @@ $source = $source.Replace('$payload = if ([string]::IsNullOrWhiteSpace($raw))',
 [IO.File]::WriteAllText($helper, $source)
 $powershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
 
-function Find-Dialog([System.Diagnostics.Process]$DialogProcess) {
-  $condition = [System.Windows.Automation.PropertyCondition]::new(
+function Find-Dialog([System.Diagnostics.Process]$DialogProcess, [string]$Title) {
+  $processCondition = [System.Windows.Automation.PropertyCondition]::new(
     [System.Windows.Automation.AutomationElement]::ProcessIdProperty, $DialogProcess.Id)
+  $titleCondition = [System.Windows.Automation.PropertyCondition]::new(
+    [System.Windows.Automation.AutomationElement]::NameProperty, $Title)
+  $condition = [System.Windows.Automation.AndCondition]::new(@($processCondition, $titleCondition))
   $deadline = [DateTime]::UtcNow.AddSeconds(10)
   do {
     if ($DialogProcess.HasExited) {
@@ -44,9 +47,13 @@ function Find-Control($Window, $Type, [string]$Name = $null) {
   }
   $condition = if ($conditions.Count -eq 1) { $conditions[0] }
     else { [System.Windows.Automation.AndCondition]::new($conditions) }
-  $control = $Window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $condition)
+  $deadline = [DateTime]::UtcNow.AddSeconds(5)
+  do {
+    $control = $Window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $condition)
+    if ($null -ne $control) { return $control }
+    Start-Sleep -Milliseconds 100
+  } while ([DateTime]::UtcNow -lt $deadline)
   if ($null -eq $control) { throw "Native dialog control is missing: $Name" }
-  return $control
 }
 
 function Click-Button($Window, [string]$Name) {
@@ -73,7 +80,8 @@ function Exercise-Dialog([string]$Action, $Payload, [string]$ExpectedStatus, [st
     $taskProcess.StandardInput.BaseStream.Write($bytes, 0, $bytes.Length)
     $taskProcess.StandardInput.BaseStream.Close()
 
-    $window = Find-Dialog $taskProcess
+    $title = if ($Action -eq 'prompt') { 'Connexease Gateway' } else { 'Confirm Connexease Gateway action' }
+    $window = Find-Dialog $taskProcess $title
     if ($Action -eq 'prompt') {
       $edit = Find-Control $window ([System.Windows.Automation.ControlType]::Edit)
       if ([bool]$edit.Current.IsPassword -ne [bool]$Payload.hidden) {
