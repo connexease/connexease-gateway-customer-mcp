@@ -63,15 +63,15 @@ function Exercise-Dialog([string]$Action, $Payload, [string]$ExpectedStatus, [st
   $start.RedirectStandardInput = $true
   $start.RedirectStandardOutput = $true
   $start.RedirectStandardError = $true
-  $start.StandardInputEncoding = [System.Text.UTF8Encoding]::new($false)
   $start.CreateNoWindow = $true
   $taskProcess = New-Object System.Diagnostics.Process
   $taskProcess.StartInfo = $start
   try {
     if (-not $taskProcess.Start()) { throw 'Could not start the Windows dialog helper' }
     $json = ConvertTo-Json -InputObject $Payload -Compress -Depth 8
-    $taskProcess.StandardInput.Write($json)
-    $taskProcess.StandardInput.Close()
+    $bytes = [System.Text.UTF8Encoding]::new($false).GetBytes($json)
+    $taskProcess.StandardInput.BaseStream.Write($bytes, 0, $bytes.Length)
+    $taskProcess.StandardInput.BaseStream.Close()
 
     $window = Find-Dialog $taskProcess
     if ($Action -eq 'prompt') {
