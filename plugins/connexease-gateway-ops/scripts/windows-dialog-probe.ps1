@@ -11,6 +11,9 @@ $silentCatch = "Write-Result 'error' `$null"
 if (-not $source.Contains($silentCatch)) { throw 'Could not prepare a diagnostic copy of the Windows helper' }
 $source = $source.Replace($silentCatch,
   '[Console]::Error.WriteLine($_.Exception.ToString())' + [Environment]::NewLine + '  ' + $silentCatch)
+$source = $source.Replace('$payload = if ([string]::IsNullOrWhiteSpace($raw))',
+  '[Console]::Error.WriteLine("Synthetic input: [" + $raw + "]")' + [Environment]::NewLine +
+  '  $payload = if ([string]::IsNullOrWhiteSpace($raw))')
 [IO.File]::WriteAllText($helper, $source)
 $powershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
 
@@ -65,7 +68,8 @@ function Exercise-Dialog([string]$Action, $Payload, [string]$ExpectedStatus, [st
   $taskProcess.StartInfo = $start
   try {
     if (-not $taskProcess.Start()) { throw 'Could not start the Windows dialog helper' }
-    $taskProcess.StandardInput.Write(($Payload | ConvertTo-Json -Compress -Depth 8))
+    $json = ConvertTo-Json -InputObject $Payload -Compress -Depth 8
+    $taskProcess.StandardInput.Write($json)
     $taskProcess.StandardInput.Close()
 
     $window = Find-Dialog $taskProcess
