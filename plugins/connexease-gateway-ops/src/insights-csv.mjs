@@ -1,5 +1,5 @@
 import { writeFile } from 'node:fs/promises';
-import { basename } from 'node:path';
+import { basename, isAbsolute } from 'node:path';
 import { selectGatewayCsvDestination } from './native-file.mjs';
 
 export const INSIGHTS_CSV_FIELDS = [
@@ -33,7 +33,7 @@ export async function saveInsightsCsv(gateway, args, pickDestination = selectGat
   const csv = buildInsightsCsv(exportData.rows);
   const destination = await pickDestination(`insights_${args.startDate}_${args.endDate}.csv`);
   if (!destination) return { status: 'cancelled', saved: false };
-  if (typeof destination !== 'string' || !destination.startsWith('/') || !destination.endsWith('.csv')) throw new Error('Select an absolute CSV destination');
+  if (typeof destination !== 'string' || !isAbsolute(destination) || !destination.endsWith('.csv')) throw new Error('Select an absolute CSV destination');
   try {
     // Even if the native dialog has its own replacement prompt, never replace
     // an existing file implicitly. The developer can choose a new name.

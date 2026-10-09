@@ -1,5 +1,5 @@
 import { readFile, stat } from 'node:fs/promises';
-import { basename, extname } from 'node:path';
+import { basename, extname, isAbsolute } from 'node:path';
 import { validateTemplateParameters } from './template-parameters.mjs';
 
 export const DEFAULT_API_BASE_URL = 'https://api-gateway.connexease.com/api/v1';
@@ -300,7 +300,7 @@ export class GatewayApiClient {
 
   async prepareWhatsappMediaUpload(appId, filePath) {
     await this.#requireApplication(appId);
-    if (typeof filePath !== 'string' || !filePath.startsWith('/')) throw new Error('Select an absolute file path in the native picker');
+    if (typeof filePath !== 'string' || !isAbsolute(filePath)) throw new Error('Select an absolute file path in the native picker');
     const info = await stat(filePath);
     if (!info.isFile() || info.size < 1 || info.size > 20 * 1024 * 1024) throw new Error('Choose a non-empty file of at most 20 MiB');
     return {

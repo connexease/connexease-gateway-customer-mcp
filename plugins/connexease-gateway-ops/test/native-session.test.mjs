@@ -146,6 +146,7 @@ test('in-session connection verifies the profile, saves refresh token, and uses 
   const saved = [];
   const calls = [];
   const session = new NativeSession({
+    platform: 'darwin',
     baseUrl,
     store: { setRefreshToken: async (token) => { saved.push(token); }, getRefreshToken: async () => { throw new Error('should not refresh'); } },
     fetchImpl: async (url, options) => {
@@ -229,6 +230,7 @@ test('disconnect clears local session and reports remote revocation separately',
   const calls = [];
   let clears = 0;
   const session = new NativeSession({
+    platform: 'darwin',
     baseUrl,
     store: {
       setRefreshToken: async () => {},

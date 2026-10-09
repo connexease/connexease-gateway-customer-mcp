@@ -36474,7 +36474,7 @@ var StdioServerTransport = class {
 
 // src/gateway-api.mjs
 import { readFile, stat } from "node:fs/promises";
-import { basename, extname } from "node:path";
+import { basename, extname, isAbsolute } from "node:path";
 
 // src/template-parameters.mjs
 var COMPONENT_TYPES = /* @__PURE__ */ new Set(["HEADER", "BODY", "FOOTER", "BUTTONS", "LIMITED_TIME_OFFER"]);
@@ -36856,7 +36856,7 @@ var GatewayApiClient = class {
   }
   async prepareWhatsappMediaUpload(appId, filePath) {
     await this.#requireApplication(appId);
-    if (typeof filePath !== "string" || !filePath.startsWith("/")) throw new Error("Select an absolute file path in the native picker");
+    if (typeof filePath !== "string" || !isAbsolute(filePath)) throw new Error("Select an absolute file path in the native picker");
     const info = await stat(filePath);
     if (!info.isFile() || info.size < 1 || info.size > 20 * 1024 * 1024) throw new Error("Choose a non-empty file of at most 20 MiB");
     return {
@@ -37473,7 +37473,7 @@ var GatewayApiClient = class {
 
 // src/insights-csv.mjs
 import { writeFile } from "node:fs/promises";
-import { basename as basename2 } from "node:path";
+import { basename as basename2, isAbsolute as isAbsolute2 } from "node:path";
 
 // src/native-file.mjs
 import { spawn as spawn2 } from "node:child_process";
@@ -37627,7 +37627,7 @@ async function saveInsightsCsv(gateway2, args, pickDestination = selectGatewayCs
   const csv = buildInsightsCsv(exportData.rows);
   const destination = await pickDestination(`insights_${args.startDate}_${args.endDate}.csv`);
   if (!destination) return { status: "cancelled", saved: false };
-  if (typeof destination !== "string" || !destination.startsWith("/") || !destination.endsWith(".csv")) throw new Error("Select an absolute CSV destination");
+  if (typeof destination !== "string" || !isAbsolute2(destination) || !destination.endsWith(".csv")) throw new Error("Select an absolute CSV destination");
   try {
     await write(destination, csv, { encoding: "utf8", flag: "wx", mode: 384 });
   } catch (error62) {
