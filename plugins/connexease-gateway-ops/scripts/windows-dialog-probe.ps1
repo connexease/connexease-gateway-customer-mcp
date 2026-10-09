@@ -63,6 +63,7 @@ function Exercise-Dialog([string]$Action, $Payload, [string]$ExpectedStatus, [st
   $start.RedirectStandardInput = $true
   $start.RedirectStandardOutput = $true
   $start.RedirectStandardError = $true
+  $start.StandardInputEncoding = [System.Text.UTF8Encoding]::new($false)
   $start.CreateNoWindow = $true
   $taskProcess = New-Object System.Diagnostics.Process
   $taskProcess.StartInfo = $start
