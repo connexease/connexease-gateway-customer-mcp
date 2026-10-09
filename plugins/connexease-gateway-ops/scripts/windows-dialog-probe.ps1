@@ -4,17 +4,7 @@ $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
 
-$productionHelper = Join-Path $PSScriptRoot 'windows-native.ps1'
-$helper = Join-Path ([IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N') + '-gateway-ui-probe.ps1')
-$source = [IO.File]::ReadAllText($productionHelper)
-$silentCatch = "Write-Result 'error' `$null"
-if (-not $source.Contains($silentCatch)) { throw 'Could not prepare a diagnostic copy of the Windows helper' }
-$source = $source.Replace($silentCatch,
-  '[Console]::Error.WriteLine($_.Exception.ToString())' + [Environment]::NewLine + '  ' + $silentCatch)
-$source = $source.Replace('$payload = if ([string]::IsNullOrWhiteSpace($raw))',
-  '[Console]::Error.WriteLine("Synthetic input: [" + $raw + "]")' + [Environment]::NewLine +
-  '  $payload = if ([string]::IsNullOrWhiteSpace($raw))')
-[IO.File]::WriteAllText($helper, $source)
+$helper = Join-Path $PSScriptRoot 'windows-native.ps1'
 $powershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
 
 function Find-Dialog([System.Diagnostics.Process]$DialogProcess, [string]$Title) {
@@ -117,12 +107,8 @@ function Exercise-Dialog([string]$Action, $Payload, [string]$ExpectedStatus, [st
   }
 }
 
-try {
-  Exercise-Dialog 'prompt' @{ label = 'Connexease Gateway email address'; hidden = $false } 'ok' 'Continue'
-  Exercise-Dialog 'prompt' @{ label = 'Connexease Gateway password'; hidden = $true } 'cancelled' 'Cancel'
-  Exercise-Dialog 'confirm' @{ prompt = 'Apply one synthetic test action?'; value = 'synthetic-preview-only'; approveLabel = 'Apply' } 'ok' 'Apply'
-  Exercise-Dialog 'confirm' @{ prompt = 'Cancel one synthetic test action?'; value = 'synthetic-preview-only'; approveLabel = 'Apply' } 'cancelled' 'Cancel'
-  Write-Output 'Native Windows email, masked password, confirmation and cancellation dialogs passed UI Automation.'
-} finally {
-  Remove-Item -LiteralPath $helper -ErrorAction SilentlyContinue
-}
+Exercise-Dialog 'prompt' @{ label = 'Connexease Gateway email address'; hidden = $false } 'ok' 'Continue'
+Exercise-Dialog 'prompt' @{ label = 'Connexease Gateway password'; hidden = $true } 'cancelled' 'Cancel'
+Exercise-Dialog 'confirm' @{ prompt = 'Apply one synthetic test action?'; value = 'synthetic-preview-only'; approveLabel = 'Apply' } 'ok' 'Apply'
+Exercise-Dialog 'confirm' @{ prompt = 'Cancel one synthetic test action?'; value = 'synthetic-preview-only'; approveLabel = 'Apply' } 'cancelled' 'Cancel'
+Write-Output 'Native Windows email, masked password, confirmation and cancellation dialogs passed UI Automation.'

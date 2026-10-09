@@ -1,6 +1,6 @@
 # Connexease Gateway Customer MCP
 
-This Connexease-owned repository combines Gateway account operations and the public-documentation assistant. The `connexease-gateway-ops` package includes both: documentation questions need no Gateway login, while account operations use the user's own Gateway account. Operations version: 0.12.0. The marketplace and Gemini extension are named `connexease-gateway-customer-mcp`; the existing operations skill names stay `connexease-gateway-ops`.
+This Connexease-owned repository combines Gateway account operations and the public-documentation assistant. The `connexease-gateway-ops` package includes both: documentation questions need no Gateway login, while account operations use the user's own Gateway account. Operations version: 0.12.1. The marketplace and Gemini extension are named `connexease-gateway-customer-mcp`; the existing operations skill names stay `connexease-gateway-ops`.
 
 The GitHub repository is currently private. Installing from its URL requires GitHub access to the Connexease repository; public customer distribution is not available until repository access or a separate distribution method is arranged.
 
@@ -69,4 +69,4 @@ Restart Claude Code after updating. See [capability matrix](CAPABILITY_MATRIX.md
 
 For Codex, refresh the official marketplace with `codex plugin marketplace upgrade connexease-gateway-customer-mcp`, then check `codex plugin list` and start a new Codex session. If the marketplace has not been added yet, use the installation commands above.
 
-The account-operation tools remain a local macOS/Windows integration for Claude Code, Codex, and Gemini CLI, not a ChatGPT/Gemini/Claude web-chat connector. Those surfaces need a separately designed hosted integration and per-user authorization for account actions. Windows support has automated and static validation, but still needs a real Windows desktop test before production claims.
+The account-operation tools remain a local macOS/Windows integration for Claude Code, Codex, and Gemini CLI, not a ChatGPT/Gemini/Claude web-chat connector. Those surfaces need a separately designed hosted integration and per-user authorization for account actions. Windows CI exercises the real native email, masked-password and confirmation dialogs with synthetic UI Automation, as well as DPAPI token storage. A real Gateway account login and a human-operated Windows desktop acceptance test remain separate.

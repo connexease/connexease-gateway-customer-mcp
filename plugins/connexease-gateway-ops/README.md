@@ -1,6 +1,6 @@
 # Connexease Gateway Operations
 
-This is a local macOS/Windows MCP plugin for account operations and public documentation questions in Claude Code, Codex, and Gemini CLI. Version: 0.12.0. It remains separate from the panel repository. See the repository [capability matrix](../../CAPABILITY_MATRIX.md) for feature status and remaining gaps.
+This is a local macOS/Windows MCP plugin for account operations and public documentation questions in Claude Code, Codex, and Gemini CLI. Version: 0.12.1. It remains separate from the panel repository. See the repository [capability matrix](../../CAPABILITY_MATRIX.md) for feature status and remaining gaps.
 
 Install the combined Claude plugin from this repository's marketplace:
 
@@ -39,6 +39,6 @@ Sandbox template sends use the Gateway template's internal UUID and revalidate a
 
 ## Validation limits
 
-The automated suite uses isolated HTTP stubs and does not contact a live account. Authentication and the legacy application-list fallback were manually tested in earlier versions, but the expanded operations require dedicated staging verification. Windows native dialogs and DPAPI storage have mock/static tests only; run an acceptance test on a real Windows desktop before customer rollout. Existing routes and request shapes were compared to the panel helpers and locally available core-service source; deployed environments may differ.
+The automated suite uses isolated HTTP stubs and does not contact a live account. Authentication and the legacy application-list fallback were manually tested in earlier versions, but the expanded operations require dedicated staging verification. Windows CI exercises the real native email, masked-password and confirmation dialogs with synthetic UI Automation and performs a real DPAPI round-trip; it does not log into Gateway or replace a human-operated desktop acceptance test. Existing routes and request shapes were compared to the panel helpers and locally available core-service source; deployed environments may differ.
 
 The bundled docs skill reads only the live official public documentation and cannot authorize an account mutation. The optional docs-only plugin and legacy Gemini CLI skill in this repository do not expose the operations MCP server; the new root Gemini extension does. Account operations are not a ChatGPT, Gemini, or Claude web-chat connector; a hosted integration with per-user authorization is separate work.

@@ -1,6 +1,6 @@
 # Distribution and verification status
 
-This Connexease-owned repository contains the local operations server and public-documentation skills in version 0.12.0. The earlier personal `gateway-connexease-ai-plugin` and `gateway-ai-plugin` repositories are not changed or removed. Existing installations of their marketplaces are not migrated automatically.
+This Connexease-owned repository contains the local operations server and public-documentation skills in version 0.12.1. The earlier personal `gateway-connexease-ai-plugin` and `gateway-ai-plugin` repositories are not changed or removed. Existing installations of their marketplaces are not migrated automatically.
 
 The Connexease repository is currently **private**. The GitHub install commands require repository access and are not yet a public customer distribution path. No repository visibility change is performed by this code release.
 
@@ -12,4 +12,4 @@ The Connexease repository is currently **private**. The GitHub install commands 
 | Gemini CLI | Root `gemini-extension.json` with the same bundled local MCP server, five skills, and five slash commands; old docs-only skill remains optional | Static package checks and local MCP probe only. Extension install, native login, and live account operations still need manual testing; an earlier machine's OAuth returned `UNSUPPORTED_CLIENT` |
 | Gemini web/app | Manual documentation-skill draft | No verified universal install link and no account-operation tools |
 
-The documentation assistants need access to `docs.gateway.connexease.com` and a live web/URL-reading tool for current answers. Packaging does not guarantee the model opens or cites the correct page. Account tools are scoped separately and require the user's own account and the native confirmation flow for writes. The CLI integrations require macOS or Windows with a visible desktop session and Node.js 20+. Windows support still needs a live desktop acceptance test. A GitHub push alone does not submit this plugin to any public AI plugin directory.
+The documentation assistants need access to `docs.gateway.connexease.com` and a live web/URL-reading tool for current answers. Packaging does not guarantee the model opens or cites the correct page. Account tools are scoped separately and require the user's own account and the native confirmation flow for writes. The CLI integrations require macOS or Windows with a visible desktop session and Node.js 20+. Windows CI verifies native dialog interactions with synthetic inputs, but a live-account, human-operated desktop acceptance test remains. A GitHub push alone does not submit this plugin to any public AI plugin directory.
