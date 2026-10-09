@@ -93,10 +93,11 @@ function Exercise-Dialog([string]$Action, $Payload, [string]$ExpectedStatus, [st
         Click-Button $window 'Continue'
       }
     } else {
-      $review = Find-Control $window 'ControlType.Edit'
-      $valuePattern = $review.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern)
-      if (-not $valuePattern.Current.IsReadOnly) { throw 'Confirmation review is editable' }
-      if ($valuePattern.Current.Value -ne [string]$Payload.value) { throw 'Confirmation review does not match the exact value' }
+      $review = Find-Control $window 'ControlType.Document'
+      $textPattern = $review.GetCurrentPattern([System.Windows.Automation.TextPattern]::Pattern)
+      if ($textPattern.DocumentRange.GetText(-1).Trim() -ne [string]$Payload.value) {
+        throw 'Confirmation review does not match the exact value'
+      }
       Click-Button $window $ExpectedValue
     }
 
