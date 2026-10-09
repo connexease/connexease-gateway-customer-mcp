@@ -38666,7 +38666,7 @@ var accessTokenProvider = supportsNativeAccount ? new NativeSession() : { getAcc
   throw new Error("Local account connection requires macOS or Windows");
 } };
 var gateway = new GatewayApiClient({ accessTokenProvider });
-var server = new McpServer({ name: "connexease-gateway-ops", version: "0.12.0" });
+var server = new McpServer({ name: "connexease-gateway-ops", version: "0.12.1" });
 var signInInProgress = false;
 var accountWriteInProgress = false;
 var templateParametersSchema = external_exports.object({

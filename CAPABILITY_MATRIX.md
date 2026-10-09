@@ -1,4 +1,4 @@
-# Gateway panel capability matrix (0.12.0)
+# Gateway panel capability matrix (0.12.1)
 
 Scope: the local Claude Code, Codex, and Gemini CLI packages run the same Connexease Gateway MCP server, which calls only existing API routes. Its tool inventory is not proof that every route is deployed in a particular environment. Automated HTTP-stub contract tests and MCP discovery run locally; account-specific writes below have not been executed against a live Gateway account in this version.
 
@@ -21,6 +21,6 @@ Scope: the local Claude Code, Codex, and Gemini CLI packages run the same Connex
 - **Full template send coverage:** current sandbox API/request validation cannot safely provide catalog/product selections for single/multi-product and carousel templates. Those sends stay blocked. Template creation and update submission are available, subject to backend/Meta validation.
 - **Cross-AI web chat installation:** these packages use a local stdio MCP server. ChatGPT/Gemini/Claude browser chat needs a hosted HTTPS MCP service with per-user OAuth; packaging the same local code is insufficient.
 - **Live confidence:** registration, mutations, uploads, and payment-adjacent reads have local contract tests only. Verify against a dedicated staging account before promising production parity. Sandbox send success is Gateway acceptance, not delivery confirmation.
-- **Windows acceptance:** Windows-native dialogs and protected token storage have automated mock/static tests but have not yet been exercised on a real Windows desktop. Test sign-in, restart persistence, logout, confirmation cancellation, file picker, and CSV save on Windows before customer rollout.
+- **Windows acceptance:** Windows CI opens the real email, masked-password and confirmation dialogs and clicks them through UI Automation using synthetic values; DPAPI token storage also has a live Windows round-trip test. A real-account login, restart persistence, logout, file picker and CSV save still need human-operated Windows desktop acceptance before customer rollout.
 
 The plugin does not bypass existing API authorization or invent backend endpoints. If a route returns 404/422 in staging or production, treat that as an environment/API gap, not as a reason to call an undocumented endpoint.

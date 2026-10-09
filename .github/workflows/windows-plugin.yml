@@ -20,6 +20,10 @@ jobs:
           cache-dependency-path: plugins/connexease-gateway-ops/package-lock.json
       - run: npm ci
       - run: npm test
+      - name: Exercise native Windows dialogs
+        shell: powershell
+        timeout-minutes: 2
+        run: .\scripts\windows-dialog-probe.ps1
       - run: npm run build
       - run: npm run probe
       - run: node scripts/probe.mjs dist/server.mjs

@@ -17,7 +17,7 @@ const accessTokenProvider = supportsNativeAccount
   ? new NativeSession()
   : { getAccessToken: async () => { throw new Error('Local account connection requires macOS or Windows'); } };
 const gateway = new GatewayApiClient({ accessTokenProvider });
-const server = new McpServer({ name: 'connexease-gateway-ops', version: '0.12.0' });
+const server = new McpServer({ name: 'connexease-gateway-ops', version: '0.12.1' });
 let signInInProgress = false;
 let accountWriteInProgress = false;
 

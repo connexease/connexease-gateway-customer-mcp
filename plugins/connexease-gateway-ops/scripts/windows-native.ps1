@@ -38,7 +38,7 @@ function New-Button([string]$Text, [int]$X, [int]$Y, [System.Windows.Forms.Dialo
 }
 
 try {
-  $raw = [Console]::In.ReadToEnd()
+  $raw = [Console]::In.ReadToEnd().TrimStart([char]0xFEFF)
   $payload = if ([string]::IsNullOrWhiteSpace($raw)) { [pscustomobject]@{} } else { ConvertFrom-Json -InputObject $raw }
 
   if ($Action -in @('prompt', 'confirm', 'open-file', 'save-file')) {
