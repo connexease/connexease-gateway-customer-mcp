@@ -39,28 +39,17 @@ function Find-Dialog([System.Diagnostics.Process]$DialogProcess, [string]$Title)
 }
 
 function Find-Control($Window, $Type, [string]$Name = $null) {
-  $conditions = @([System.Windows.Automation.PropertyCondition]::new(
-    [System.Windows.Automation.AutomationElement]::ControlTypeProperty, $Type))
-  if ($null -ne $Name) {
-    $conditions += [System.Windows.Automation.PropertyCondition]::new(
-      [System.Windows.Automation.AutomationElement]::NameProperty, $Name)
-  }
-  $condition = if ($conditions.Count -eq 1) { $conditions[0] }
-    else { [System.Windows.Automation.AndCondition]::new($conditions) }
   $deadline = [DateTime]::UtcNow.AddSeconds(5)
   do {
-    $control = $Window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $condition)
-    if ($null -ne $control) { return $control }
-    Start-Sleep -Milliseconds 100
-  } while ([DateTime]::UtcNow -lt $deadline)
-  if ($null -eq $control) {
     $children = $Window.FindAll([System.Windows.Automation.TreeScope]::Descendants,
       [System.Windows.Automation.Condition]::TrueCondition)
-    $summary = @($children | Select-Object -First 15 | ForEach-Object {
-      "$($_.Current.ControlType.ProgrammaticName):$($_.Current.Name)"
-    }) -join ', '
-    throw "Native dialog control is missing: $Name; window: $($Window.Current.Name); descendants: $summary"
-  }
+    foreach ($child in $children) {
+      if ($child.Current.ControlType.ProgrammaticName -eq $Type.ProgrammaticName -and
+        ($null -eq $Name -or $child.Current.Name -eq $Name)) { return $child }
+    }
+    Start-Sleep -Milliseconds 100
+  } while ([DateTime]::UtcNow -lt $deadline)
+  throw "Native dialog control is missing: $Name"
 }
 
 function Click-Button($Window, [string]$Name) {
