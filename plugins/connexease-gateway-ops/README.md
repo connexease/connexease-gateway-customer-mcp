@@ -5,8 +5,8 @@ This is a local macOS MCP plugin for account operations and public documentation
 Install the combined Claude plugin from this repository's marketplace:
 
 ```bash
-claude plugin marketplace add oguzhannsaritas/gateway-connexease-ai-plugin
-claude plugin install connexease-gateway-ops@connexease-gateway-ai
+claude plugin marketplace add connexease/connexease-gateway-customer-mcp
+claude plugin install connexease-gateway-ops@connexease-gateway-customer-mcp
 ```
 
 ## Developer setup

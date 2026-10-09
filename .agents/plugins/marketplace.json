@@ -1,7 +1,7 @@
 {
-  "name": "connexease-gateway-ai",
+  "name": "connexease-gateway-customer-mcp",
   "interface": {
-    "displayName": "Connexease Gateway AI"
+    "displayName": "Connexease Gateway Customer MCP"
   },
   "plugins": [
     {

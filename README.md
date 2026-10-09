@@ -1,14 +1,16 @@
-# Connexease Gateway AI plugin
+# Connexease Gateway Customer MCP
 
-This repository combines Connexease Gateway account operations and the public-documentation assistant. The `connexease-gateway-ops` package includes both: documentation questions need no Gateway login, while account operations use the user's own Gateway account. Operations version: 0.11.0.
+This Connexease-owned repository combines Gateway account operations and the public-documentation assistant. The `connexease-gateway-ops` package includes both: documentation questions need no Gateway login, while account operations use the user's own Gateway account. Operations version: 0.11.0. The marketplace and Gemini extension are named `connexease-gateway-customer-mcp`; the existing operations skill names stay `connexease-gateway-ops`.
+
+The GitHub repository is currently private. Installing from its URL requires GitHub access to the Connexease repository; public customer distribution is not available until repository access or a separate distribution method is arranged.
 
 ## Install in Claude Code
 
 Requires macOS, Node.js 20+, npm, and Claude Code. Authentication uses native macOS dialogs and the signed-in user's Keychain.
 
 ```bash
-claude plugin marketplace add oguzhannsaritas/gateway-connexease-ai-plugin
-claude plugin install connexease-gateway-ops@connexease-gateway-ai
+claude plugin marketplace add connexease/connexease-gateway-customer-mcp
+claude plugin install connexease-gateway-ops@connexease-gateway-customer-mcp
 claude
 ```
 
@@ -33,13 +35,13 @@ The comparison workflow accepts two explicit date ranges for one Insight widget.
 
 ## Codex and Gemini CLI
 
-For the legacy `/connexease-gateway-docs:ask` command, this marketplace also contains an optional read-only `connexease-gateway-docs` plugin. New Claude users need only `connexease-gateway-ops`; installing both creates two documentation commands. The old [documentation repository](https://github.com/oguzhannsaritas/gateway-ai-plugin) and any existing installation remain untouched. Existing users may keep the old plugin or migrate manually; no uninstall happens automatically.
+For the legacy `/connexease-gateway-docs:ask` command, this marketplace also contains an optional read-only `connexease-gateway-docs` plugin. New Claude users need only `connexease-gateway-ops`; installing both creates two documentation commands. The earlier [personal operations repository](https://github.com/oguzhannsaritas/gateway-connexease-ai-plugin) and [documentation repository](https://github.com/oguzhannsaritas/gateway-ai-plugin) remain untouched. Existing installations do not migrate or uninstall automatically. If both marketplaces are installed, choose one operations plugin to avoid duplicate skills and tools.
 
 Codex CLI/desktop can install the same operations plugin from this repository's portable marketplace. The optional `connexease-gateway-docs` package remains read-only:
 
 ```bash
-codex plugin marketplace add oguzhannsaritas/gateway-connexease-ai-plugin
-codex plugin add connexease-gateway-ops@connexease-gateway-ai
+codex plugin marketplace add connexease/connexease-gateway-customer-mcp
+codex plugin add connexease-gateway-ops@connexease-gateway-customer-mcp
 codex
 ```
 
@@ -48,21 +50,23 @@ In Codex, ask naturally (for example, “Gateway hesabıma bağlan ve uygulamala
 For Gemini CLI, install the repository as an extension, not the older docs-only skill:
 
 ```bash
-gemini extensions install https://github.com/oguzhannsaritas/gateway-connexease-ai-plugin.git
+gemini extensions install https://github.com/connexease/connexease-gateway-customer-mcp.git
 gemini
 ```
 
 Gemini CLI can answer natural-language requests or use `/connexease-gateway:ask`, `/connexease-gateway:connect`, `/connexease-gateway:panel-ops`, `/connexease-gateway:sandbox-ops`, and `/connexease-gateway:insights`. The extension bundles the same local account server and skills. The operations flow requires macOS, Node.js 20+, visible native dialogs, the user's Gateway credentials entered locally, explicit chat approval for writes, and a separate native confirmation.
 
-These new install paths are prepared in source but still need independent end-to-end installation and account testing after publication. ChatGPT web and Gemini web/app do not automatically load local Git plugins; see [distribution status](DISTRIBUTION.md) and the [manual Gemini chat draft](guides/gemini-chat-instructions.md).
+These install paths still need independent end-to-end installation and account testing. ChatGPT web and Gemini web/app do not automatically load local Git plugins; see [distribution status](DISTRIBUTION.md) and the [manual Gemini chat draft](guides/gemini-chat-instructions.md).
 
 For updates:
 
 ```bash
-claude plugin marketplace update connexease-gateway-ai
-claude plugin update connexease-gateway-ops@connexease-gateway-ai
+claude plugin marketplace update connexease-gateway-customer-mcp
+claude plugin update connexease-gateway-ops@connexease-gateway-customer-mcp
 ```
 
 Restart Claude Code after updating. See [capability matrix](CAPABILITY_MATRIX.md) for supported operations and the separately reported gaps, and [implementation details](plugins/connexease-gateway-ops/README.md) for local validation and security boundaries.
+
+For Codex, refresh the official marketplace with `codex plugin marketplace upgrade connexease-gateway-customer-mcp`, then check `codex plugin list` and start a new Codex session. If the marketplace has not been added yet, use the installation commands above.
 
 The account-operation tools remain a local macOS integration for Claude Code, Codex, and Gemini CLI, not a ChatGPT/Gemini/Claude web-chat connector. Those surfaces need a separately designed hosted integration and per-user authorization for account actions.

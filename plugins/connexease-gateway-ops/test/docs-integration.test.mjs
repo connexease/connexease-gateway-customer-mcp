@@ -10,6 +10,7 @@ const json = (path) => JSON.parse(read(path));
 
 test('one Claude operations installation contains docs ask and keeps account tools separate', () => {
   const marketplace = json('.claude-plugin/marketplace.json');
+  assert.equal(marketplace.name, 'connexease-gateway-customer-mcp');
   assert.deepEqual(marketplace.plugins.map(({ name }) => name), ['connexease-gateway-ops', 'connexease-gateway-docs']);
   const ops = marketplace.plugins[0];
   assert.equal(ops.source, './plugins/connexease-gateway-ops');
@@ -23,6 +24,7 @@ test('one Claude operations installation contains docs ask and keeps account too
 
 test('portable Codex plugin includes documentation and account operations', () => {
   const marketplace = json('.agents/plugins/marketplace.json');
+  assert.equal(marketplace.name, 'connexease-gateway-customer-mcp');
   assert.deepEqual(marketplace.plugins.map(({ name }) => name), ['connexease-gateway-ops', 'connexease-gateway-docs']);
   const opsPath = marketplace.plugins[0].source.path;
   assert.equal(opsPath, './plugins/connexease-gateway-ops');
@@ -45,7 +47,7 @@ test('portable Codex plugin includes documentation and account operations', () =
 
 test('Gemini extension exposes the same operations server and skills', () => {
   const extension = json('gemini-extension.json');
-  assert.equal(extension.name, 'gateway-connexease-ai-plugin');
+  assert.equal(extension.name, 'connexease-gateway-customer-mcp');
   assert.equal(extension.mcpServers['gateway-account'].command, 'node');
   assert.match(extension.mcpServers['gateway-account'].args[0], /plugins\$\{\/\}connexease-gateway-ops\$\{\/\}dist\$\{\/\}server\.mjs$/);
   for (const name of ['ask', 'connect', 'panel-ops', 'sandbox-ops', 'insights']) {

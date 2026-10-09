@@ -1,6 +1,8 @@
 # Distribution and verification status
 
-This repository contains the local operations server and public-documentation skills in version 0.11.0. The old `gateway-ai-plugin` repository is not changed or removed.
+This Connexease-owned repository contains the local operations server and public-documentation skills in version 0.11.0. The earlier personal `gateway-connexease-ai-plugin` and `gateway-ai-plugin` repositories are not changed or removed. Existing installations of their marketplaces are not migrated automatically.
+
+The Connexease repository is currently **private**. The GitHub install commands require repository access and are not yet a public customer distribution path. No repository visibility change is performed by this code release.
 
 | Surface | This repository provides | Verification boundary |
 | --- | --- | --- |

@@ -1,6 +1,6 @@
 {
-  "name": "connexease-gateway-ai",
-  "description": "Connexease Gateway account and documentation tools for Claude Code",
+  "name": "connexease-gateway-customer-mcp",
+  "description": "Connexease Gateway customer account and documentation tools for Claude Code",
   "owner": { "name": "Connexease" },
   "plugins": [
     {

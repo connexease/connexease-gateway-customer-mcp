@@ -3,5 +3,6 @@
   "name": "connexease-gateway-ops",
   "version": "0.11.0",
   "description": "Connexease Gateway documentation and account operations with local macOS confirmation.",
-  "author": { "name": "Connexease" }
+  "author": { "name": "Connexease" },
+  "repository": "https://github.com/connexease/connexease-gateway-customer-mcp"
 }
