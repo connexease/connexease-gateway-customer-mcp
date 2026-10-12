@@ -44,7 +44,9 @@ test('template health reads every page and summarizes filters, quality, rejectio
   assert.deepEqual(result.qualityDistribution, { GREEN: 1, RED: 1, YELLOW: 1 });
   assert.deepEqual(result.lowQualityTemplates.map(({ sourceId }) => sourceId), ['b', 'c']);
   assert.equal(result.rejectedTemplates[0].rejectedReason, 'Policy');
-  assert.deepEqual(result.categoryChanges[0], { sourceId: 'b', name: 'Rejected', previousCategory: 'UTILITY', correctCategory: 'MARKETING' });
+  assert.deepEqual(result.categoryChanges, [
+    { sourceId: 'b', name: 'Rejected', language: 'tr_TR', change: 'applied', from: 'UTILITY', to: 'MARKETING' },
+  ]);
   assert.deepEqual(result.categoryDistribution, { UTILITY: 1, MARKETING: 2 });
   assert.deepEqual(result.languageDistribution, { en_US: 1, tr_TR: 2 });
   assert.match(result.note, /gönderilme, okunma veya tıklanma metriklerini içermez/);
@@ -55,6 +57,24 @@ test('template health reads every page and summarizes filters, quality, rejectio
   assert.equal(filtered.statusCounts.APPROVED, 0);
 });
 
+test('category changes compare previousCategory and correctCategory with the current category separately', async () => {
+  const template = (sourceId, category, extra) => ({ sourceId, name: sourceId, language: 'en_US', category, status: 'APPROVED', ...extra });
+  const { client } = clientFor([{ items: [
+    template('applied', 'MARKETING', { previousCategory: 'UTILITY', correctCategory: null }),
+    template('pending', 'UTILITY', { previousCategory: null, correctCategory: 'MARKETING' }),
+    template('both', 'MARKETING', { previousCategory: 'UTILITY', correctCategory: 'AUTHENTICATION' }),
+    template('settled', 'MARKETING', { previousCategory: 'MARKETING', correctCategory: 'MARKETING' }),
+    template('untouched', 'UTILITY', { previousCategory: null, correctCategory: null }),
+  ], pagingMetadata: { hasNext: false } }]);
+  const result = await getTemplateHealthSummary(client, { appId });
+  assert.deepEqual(result.categoryChanges.map(({ sourceId, change, from, to }) => [sourceId, change, from, to]), [
+    ['applied', 'applied', 'UTILITY', 'MARKETING'],
+    ['pending', 'pending', 'UTILITY', 'MARKETING'],
+    ['both', 'applied', 'UTILITY', 'MARKETING'],
+    ['both', 'pending', 'MARKETING', 'AUTHENTICATION'],
+  ]);
+});
+
 test('empty template list returns a useful zero summary', async () => {
   const { client } = clientFor([{ items: [], pagingMetadata: { hasNext: false } }]);
   const result = await getTemplateHealthSummary(client, { appId });
@@ -63,6 +83,7 @@ test('empty template list returns a useful zero summary', async () => {
   assert.equal(result.truncated, false);
   assert.deepEqual(result.qualityDistribution, {});
   assert.deepEqual(result.rejectedTemplates, []);
+  assert.deepEqual(result.categoryChanges, []);
 });
 
 test('1000-template safety cap marks a longer list as truncated', async () => {

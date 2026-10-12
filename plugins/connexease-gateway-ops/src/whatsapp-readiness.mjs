@@ -53,6 +53,8 @@ export async function checkWhatsappAccountReadiness(gateway, appId) {
     gateway.getWhatsappHealth(appId),
     gateway.getWhatsappBusinessProfile(appId),
   ]);
+  // Sign-in, ownership and appId errors fail every read; report them instead of an all-unknown summary.
+  if ([application, health, profile].every((result) => result.status === 'rejected')) throw application.reason;
   const checks = {
     accountReviewStatus: application.status === 'fulfilled'
       ? reviewStatus(application.value.channel?.accountReviewStatus) : unknown(),

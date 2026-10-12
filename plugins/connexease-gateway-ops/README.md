@@ -1,6 +1,6 @@
 # Connexease Gateway Operations
 
-This is a local macOS/Windows MCP plugin for account operations and public documentation questions in Claude Code, Codex, and Gemini CLI. Version: 0.13.0. It remains separate from the panel repository. See the repository [capability matrix](../../CAPABILITY_MATRIX.md) for feature status and remaining gaps.
+This is a local macOS/Windows MCP plugin for account operations and public documentation questions in Claude Code, Codex, and Gemini CLI. Version: 0.13.1. It remains separate from the panel repository. See the repository [capability matrix](../../CAPABILITY_MATRIX.md) for feature status and remaining gaps.
 
 Install the combined Claude plugin from this repository's marketplace:
 

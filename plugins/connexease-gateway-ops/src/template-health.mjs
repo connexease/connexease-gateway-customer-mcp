@@ -11,6 +11,20 @@ function countBy(items, field) {
   return counts;
 }
 
+// Meta sets previousCategory after it has recategorized a template and correctCategory for the
+// category it will apply next, so each field is compared with the current category on its own.
+function categoryChangesOf(template) {
+  const changes = [];
+  const base = { sourceId: template.sourceId, name: template.name, language: template.language };
+  if (template.previousCategory && template.previousCategory !== template.category) {
+    changes.push({ ...base, change: 'applied', from: template.previousCategory, to: template.category });
+  }
+  if (template.correctCategory && template.correctCategory !== template.category) {
+    changes.push({ ...base, change: 'pending', from: template.category, to: template.correctCategory });
+  }
+  return changes;
+}
+
 function hasNextPage(page, pageNumber) {
   const paging = page.pagingMetadata;
   if (typeof paging?.hasNext === 'boolean') return paging.hasNext;
@@ -50,10 +64,7 @@ export async function getTemplateHealthSummary(gateway, { appId, status, categor
   const lowQualityTemplates = filtered.filter((template) => ['RED', 'YELLOW'].includes(String(template.qualityScore).toUpperCase())).map((template) => ({
     sourceId: template.sourceId, name: template.name, qualityScore: template.qualityScore,
   }));
-  const categoryChanges = filtered.filter((template) => template.previousCategory && template.correctCategory && template.previousCategory !== template.correctCategory).map((template) => ({
-    sourceId: template.sourceId, name: template.name,
-    previousCategory: template.previousCategory, correctCategory: template.correctCategory,
-  }));
+  const categoryChanges = filtered.flatMap(categoryChangesOf);
   return {
     appId,
     filters: { status: status ?? null, category: category ?? null },

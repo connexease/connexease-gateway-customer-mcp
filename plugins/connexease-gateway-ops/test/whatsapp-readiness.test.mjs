@@ -12,7 +12,7 @@ const healthy = {
 };
 const completeProfile = { websites: ['https://example.test'], email: 'dev@example.test', address: 'Example', description: 'Example business' };
 
-function clientFor({ review = 'APPROVED', health = healthy, profile = completeProfile, fail = null } = {}) {
+function clientFor({ review = 'APPROVED', health = healthy, profile = completeProfile, fail = [] } = {}) {
   const calls = [];
   const client = new GatewayApiClient({
     accessTokenProvider: { getAccessToken: async () => 'test-token' },
@@ -21,7 +21,7 @@ function clientFor({ review = 'APPROVED', health = healthy, profile = completePr
       assert.equal(options.method, 'GET');
       calls.push(url.pathname);
       if (url.pathname === '/api/v1/applications') return new Response(JSON.stringify({ isSuccess: true, data: [app] }));
-      if (url.pathname === fail) return new Response(null, { status: 503 });
+      if (fail.includes(url.pathname)) return new Response(null, { status: 503 });
       let data;
       if (url.pathname === `/api/v1/applications/${appId}`) data = { ...app, channel: { platform: 'whatsapp', accountReviewStatus: review } };
       else if (url.pathname.endsWith('/health')) data = health;
@@ -68,11 +68,46 @@ test('incomplete profile and declined name are separately reported', async () =>
 });
 
 test('one unavailable subcall becomes unknown without discarding healthy checks', async () => {
-  const { client } = clientFor({ fail: `/api/v1/channels/whatsapp/applications/${appId}/health` });
+  const { client } = clientFor({ fail: [`/api/v1/channels/whatsapp/applications/${appId}/health`] });
   const result = await checkWhatsappAccountReadiness(client, appId);
   assert.equal(result.checks.accountReviewStatus.status, 'ok');
   assert.equal(result.checks.businessProfile.status, 'ok');
   assert.equal(result.checks.accountStatus.status, 'unknown');
   assert.equal(result.overallStatus, 'unknown');
   assert.ok(result.nextSteps.some((step) => step.includes('Okunamayan')));
+});
+
+test('two unavailable subcalls still return the one readable check', async () => {
+  const { client } = clientFor({ fail: [
+    `/api/v1/channels/whatsapp/applications/${appId}/health`,
+    `/api/v1/channels/whatsapp/applications/${appId}/profile`,
+  ] });
+  const result = await checkWhatsappAccountReadiness(client, appId);
+  assert.equal(result.checks.accountReviewStatus.status, 'ok');
+  assert.equal(result.checks.accountStatus.status, 'unknown');
+  assert.equal(result.checks.businessProfile.status, 'unknown');
+});
+
+test('signed-out session fails with the sign-in error instead of an all-unknown report', async () => {
+  const client = new GatewayApiClient({
+    accessTokenProvider: { getAccessToken: async () => { throw new Error('Gateway login required. Use the connect skill.'); } },
+    baseUrl: 'https://gateway.example.test/api/v1',
+    fetchImpl: async () => { throw new Error('no HTTP request expected without a session'); },
+  });
+  await assert.rejects(checkWhatsappAccountReadiness(client, appId), /Gateway login required/);
+});
+
+test('an application outside the account fails instead of reporting unknown checks', async () => {
+  const { client, calls } = clientFor();
+  await assert.rejects(checkWhatsappAccountReadiness(client, 'other-app'), /Application not found in this account/);
+  assert.ok(calls.every((path) => path === '/api/v1/applications'));
+});
+
+test('three unavailable subcalls surface the Gateway error', async () => {
+  const { client } = clientFor({ fail: [
+    `/api/v1/applications/${appId}`,
+    `/api/v1/channels/whatsapp/applications/${appId}/health`,
+    `/api/v1/channels/whatsapp/applications/${appId}/profile`,
+  ] });
+  await assert.rejects(checkWhatsappAccountReadiness(client, appId));
 });

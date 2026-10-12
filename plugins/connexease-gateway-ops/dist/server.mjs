@@ -38678,6 +38678,17 @@ function countBy(items, field) {
   }
   return counts;
 }
+function categoryChangesOf(template) {
+  const changes = [];
+  const base = { sourceId: template.sourceId, name: template.name, language: template.language };
+  if (template.previousCategory && template.previousCategory !== template.category) {
+    changes.push({ ...base, change: "applied", from: template.previousCategory, to: template.category });
+  }
+  if (template.correctCategory && template.correctCategory !== template.category) {
+    changes.push({ ...base, change: "pending", from: template.category, to: template.correctCategory });
+  }
+  return changes;
+}
 function hasNextPage(page, pageNumber) {
   const paging = page.pagingMetadata;
   if (typeof paging?.hasNext === "boolean") return paging.hasNext;
@@ -38718,12 +38729,7 @@ async function getTemplateHealthSummary(gateway2, { appId, status, category } = 
     name: template.name,
     qualityScore: template.qualityScore
   }));
-  const categoryChanges = filtered.filter((template) => template.previousCategory && template.correctCategory && template.previousCategory !== template.correctCategory).map((template) => ({
-    sourceId: template.sourceId,
-    name: template.name,
-    previousCategory: template.previousCategory,
-    correctCategory: template.correctCategory
-  }));
+  const categoryChanges = filtered.flatMap(categoryChangesOf);
   return {
     appId,
     filters: { status: status ?? null, category: category ?? null },
@@ -38811,6 +38817,7 @@ async function checkWhatsappAccountReadiness(gateway2, appId) {
     gateway2.getWhatsappHealth(appId),
     gateway2.getWhatsappBusinessProfile(appId)
   ]);
+  if ([application, health, profile].every((result) => result.status === "rejected")) throw application.reason;
   const checks = {
     accountReviewStatus: application.status === "fulfilled" ? reviewStatus(application.value.channel?.accountReviewStatus) : unknown2(),
     accountStatus: health.status === "fulfilled" ? metric(health.value.accountStatus) : unknown2(),
@@ -38849,7 +38856,7 @@ var accessTokenProvider = supportsNativeAccount ? new NativeSession() : { getAcc
   throw new Error("Local account connection requires macOS or Windows");
 } };
 var gateway = new GatewayApiClient({ accessTokenProvider });
-var server = new McpServer({ name: "connexease-gateway-ops", version: "0.13.0" });
+var server = new McpServer({ name: "connexease-gateway-ops", version: "0.13.1" });
 var signInInProgress = false;
 var accountWriteInProgress = false;
 var templateParametersSchema = external_exports.object({
@@ -39114,7 +39121,7 @@ server.registerTool("get_whatsapp_template", {
   annotations: { readOnlyHint: true }
 }, guarded(({ appId, sourceId }) => gateway.getWhatsappTemplate(appId, sourceId)));
 server.registerTool("get_template_health_summary", {
-  description: "Read up to 1000 templates across pages for one owned application and summarize status, quality, rejection reasons, category changes, languages and categories. This does not provide per-template sent, delivered, read or click metrics.",
+  description: 'Read up to 1000 templates across pages for one owned application and summarize status, quality, rejection reasons, category changes, languages and categories. A category change is "applied" when Meta already moved the template from previousCategory, or "pending" when Meta will move it to correctCategory. This does not provide per-template sent, delivered, read or click metrics.',
   inputSchema: {
     appId: external_exports.string().min(1).max(100),
     status: external_exports.enum(["APPROVED", "PENDING", "REJECTED", "PAUSED", "DISABLED"]).optional(),

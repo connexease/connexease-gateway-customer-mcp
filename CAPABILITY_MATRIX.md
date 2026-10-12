@@ -1,4 +1,4 @@
-# Gateway panel capability matrix (0.13.0)
+# Gateway panel capability matrix (0.13.1)
 
 Scope: the local Claude Code, Codex, and Gemini CLI packages run the same Connexease Gateway MCP server, which calls only existing API routes. Its tool inventory is not proof that every route is deployed in a particular environment. Automated HTTP-stub contract tests and MCP discovery run locally; account-specific writes below have not been executed against a live Gateway account in this version.
 
