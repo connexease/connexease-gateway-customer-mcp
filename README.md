@@ -1,6 +1,6 @@
 # Connexease Gateway Customer MCP
 
-This Connexease-owned repository combines Gateway account operations and the public-documentation assistant. The `connexease-gateway-ops` package includes both: documentation questions need no Gateway login, while account operations use the user's own Gateway account. Operations version: 0.12.1. The marketplace and Gemini extension are named `connexease-gateway-customer-mcp`; the existing operations skill names stay `connexease-gateway-ops`.
+This Connexease-owned repository combines Gateway account operations and the public-documentation assistant. The `connexease-gateway-ops` package includes both: documentation questions need no Gateway login, while account operations use the user's own Gateway account. Operations version: 0.13.0. The marketplace and Gemini extension are named `connexease-gateway-customer-mcp`; the existing operations skill names stay `connexease-gateway-ops`.
 
 The GitHub repository is currently private. Installing from its URL requires GitHub access to the Connexease repository; public customer distribution is not available until repository access or a separate distribution method is arranged.
 
@@ -28,6 +28,8 @@ Test numaralarını göster; seçtiğim numaraya mesajı göndermeden önce öni
 The first example is a read-only public-documentation question. Account-specific reads and writes use the separate scoped tools and existing approval rules. A documentation page is never permission to send a message or change an account.
 
 `/connexease-gateway-ops:panel-ops` explains available account, application, template, webhook, billing, insight, and security operations. `/connexease-gateway-ops:sandbox-ops` walks through a real sandbox send. Writes require explicit approval in chat and a second native macOS or Windows confirmation. Secrets are entered or displayed locally, never passed to Claude in tool arguments or responses. A successful sandbox API response means Gateway accepted the request, not that WhatsApp delivered it.
+
+The read-only `check_whatsapp_account_readiness` tool combines application, WhatsApp health and business-profile checks; it cannot read definitive Meta business verification status. `get_template_health_summary` scans up to 1000 templates across pages for status, quality, rejection and category-change summaries. Neither tool supplies per-template sent/read/click metrics. Ask the `panel-ops` skill for account readiness or template health; ask the `insights` skill for category-level template performance.
 
 The `/connexease-gateway-ops:insights` skill maps a named Insight page widget to one API report. It prints only that widget's table, plus a smooth monochrome Unicode line chart for time-series data or a bar chart for category data. The line chart uses braille dots, readable axes and date labels without terminal color codes. `Apps Overview` remains unavailable because the panel still displays mock/Coming Soon data there.
 

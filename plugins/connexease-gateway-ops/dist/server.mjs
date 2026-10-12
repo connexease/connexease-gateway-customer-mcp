@@ -36787,6 +36787,10 @@ var GatewayApiClient = class {
         phoneNumberId: app.channel.phoneNumberId,
         wabaId: app.channel.wabaId,
         businessUsername: app.channel.businessUsername,
+        accountReviewStatus: app.channel.accountReviewStatus ?? null,
+        currency: app.channel.currency ?? null,
+        timezone: app.channel.timezone ?? null,
+        businessUsernameStatus: app.channel.businessUsernameStatus ?? null,
         instagramAccountId: app.channel.instagramAccountId,
         instagramAccountName: app.channel.instagramAccountName,
         username: app.channel.username,
@@ -36995,14 +36999,16 @@ var GatewayApiClient = class {
     const page = await this.#requestResponse(`/channels/whatsapp/applications/${encodeURIComponent(appId)}/templates?pageNumber=${pageNumber}&pageSize=${pageSize}`);
     const data = requireArray(page.data, "templates");
     return {
-      items: data.map(({ sourceId, name, language, category, status, qualityScore, rejectedReason }) => ({
+      items: data.map(({ sourceId, name, language, category, status, qualityScore, rejectedReason, correctCategory, previousCategory }) => ({
         sourceId,
         name,
         language,
         category,
         status,
         qualityScore,
-        rejectedReason
+        rejectedReason,
+        correctCategory: correctCategory ?? null,
+        previousCategory: previousCategory ?? null
       })),
       pagingMetadata: page.pagingMetadata ?? null
     };
@@ -37012,8 +37018,20 @@ var GatewayApiClient = class {
     await this.#requireApplication(appId);
     const template = await this.#request(`/channels/whatsapp/applications/${encodeURIComponent(appId)}/templates/${encodeURIComponent(sourceId)}`);
     if (!template || template.sourceId !== sourceId) throw new Error("Gateway returned an invalid template response");
-    const { id, name, language, category, status, components, qualityScore, rejectedReason } = template;
-    return { id, sourceId, name, language, category, status, components, qualityScore, rejectedReason };
+    const { id, name, language, category, status, components, qualityScore, rejectedReason, correctCategory, previousCategory } = template;
+    return {
+      id,
+      sourceId,
+      name,
+      language,
+      category,
+      status,
+      components,
+      qualityScore,
+      rejectedReason,
+      correctCategory: correctCategory ?? null,
+      previousCategory: previousCategory ?? null
+    };
   }
   async getWebhookStatus(appId) {
     await this.#requireApplication(appId);
@@ -37681,7 +37699,7 @@ function categoryValue(point, category, field) {
 function rowsForView(view, data) {
   if (view === "summary") {
     const stats = record2(data, "insights summary");
-    return { columns: ["metric", "value"], rows: SUMMARY_FIELDS.map((metric) => ({ metric, value: number4(stats[metric], metric) })), defaultMetric: null };
+    return { columns: ["metric", "value"], rows: SUMMARY_FIELDS.map((metric2) => ({ metric: metric2, value: number4(stats[metric2], metric2) })), defaultMetric: null };
   }
   if (view === "messagesBreakup") {
     if (!Array.isArray(data)) throw new Error("Gateway returned invalid message breakup rows");
@@ -37773,9 +37791,9 @@ function compactAxis(value) {
   return Number(value.toFixed(2)).toString();
 }
 var BRAILLE_BITS = [[1, 2, 4, 64], [8, 16, 32, 128]];
-function renderTerminalLineChart(rows, metric, xKey = "date", scale) {
+function renderTerminalLineChart(rows, metric2, xKey = "date", scale) {
   if (!rows.length) return "No data for line chart.";
-  const values = rows.map((row) => number4(row[metric], metric));
+  const values = rows.map((row) => number4(row[metric2], metric2));
   const width = Math.min(60, Math.max(28, (rows.length - 1) * 4 + 1));
   const height = 9;
   const min = scale?.min ?? Math.min(0, ...values);
@@ -37827,19 +37845,19 @@ function renderTerminalLineChart(rows, metric, xKey = "date", scale) {
   lines.push(`${" ".repeat(axisWidth + 3)}${rows.length === 1 ? first : first.padEnd(width - last.length) + last}`);
   return lines.join("\n");
 }
-function renderTerminalBarChart(rows, metric, labelKey) {
+function renderTerminalBarChart(rows, metric2, labelKey) {
   if (!rows.length) return "No data for bar chart.";
   const displayed = rows.slice(0, 20);
-  const max = Math.max(0, ...displayed.map((row) => number4(row[metric], metric)));
+  const max = Math.max(0, ...displayed.map((row) => number4(row[metric2], metric2)));
   const lines = displayed.map((row) => {
-    const value = number4(row[metric], metric);
+    const value = number4(row[metric2], metric2);
     const count = max === 0 ? 0 : Math.round(Math.max(0, value) / max * 24);
     return `${formatValue(row[labelKey]).padEnd(20)} | ${"#".repeat(count).padEnd(24)} ${formatAxis(value)}`;
   });
   if (rows.length > displayed.length) lines.push(`... ${rows.length - displayed.length} more rows not charted`);
   return lines.join("\n");
 }
-async function getInsightsView(gateway2, { view, startDate, endDate, appId, granularity, pageNumber = 1, pageSize = 10, metric } = {}) {
+async function getInsightsView(gateway2, { view, startDate, endDate, appId, granularity, pageNumber = 1, pageSize = 10, metric: metric2 } = {}) {
   const spec = INSIGHT_VIEWS[view];
   if (!spec) throw new Error(`Unknown insights view. Choose one of: ${Object.keys(INSIGHT_VIEWS).join(", ")}`);
   if (spec.report === null) {
@@ -37867,7 +37885,7 @@ This panel widget still displays mock/Coming Soon data. No real Gateway API data
   });
   const mapped = rowsForView(view, report.data);
   const validMetrics = mapped.columns.filter((column) => column !== "date" && column !== "category" && column !== "metric");
-  const selectedMetric = metric ?? mapped.defaultMetric;
+  const selectedMetric = metric2 ?? mapped.defaultMetric;
   if (selectedMetric !== null && !validMetrics.includes(selectedMetric)) {
     throw new Error(`Metric ${selectedMetric} is not available for ${view}. Choose one of: ${validMetrics.join(", ")}`);
   }
@@ -37941,12 +37959,12 @@ function comparisonRow(name, first, second, category) {
   if (percent !== null && !Number.isFinite(percent)) throw new Error(`Gateway returned an invalid ${name} percentage change`);
   return { ...category === void 0 ? {} : { category }, metric: name, periodA: a, periodB: b, delta, percent };
 }
-function compareMapped(view, first, second, metric) {
+function compareMapped(view, first, second, metric2) {
   const available = metricNames(first, view);
-  if (metric !== void 0 && !available.includes(metric)) {
-    throw new Error(`Metric ${metric} is not available for ${view}. Choose one of: ${available.join(", ")}`);
+  if (metric2 !== void 0 && !available.includes(metric2)) {
+    throw new Error(`Metric ${metric2} is not available for ${view}. Choose one of: ${available.join(", ")}`);
   }
-  const selected = metric === void 0 ? available : [metric];
+  const selected = metric2 === void 0 ? available : [metric2];
   if (view === "summary") {
     const a = new Map(first.rows.map((row) => [row.metric, row.value]));
     const b = new Map(second.rows.map((row) => [row.metric, row.value]));
@@ -38004,7 +38022,7 @@ async function readPeriod(gateway2, view, range, appId, granularity) {
   }
   throw new Error(`Comparison needs more than ${MAX_BREAKUP_PAGES} breakup pages per period; narrow the date ranges. Partial totals were not returned.`);
 }
-async function compareInsightsPeriods(gateway2, { view, periodA, periodB, appId, granularity, metric } = {}) {
+async function compareInsightsPeriods(gateway2, { view, periodA, periodB, appId, granularity, metric: metric2 } = {}) {
   const spec = INSIGHT_VIEWS[view];
   if (!spec) throw new Error(`Unknown insights view. Choose one of: ${Object.keys(INSIGHT_VIEWS).join(", ")}`);
   if (spec.report === null) return {
@@ -38024,7 +38042,7 @@ This panel widget still displays mock/Coming Soon data. No real Gateway API data
   }
   const first = await readPeriod(gateway2, view, a, appId, granularity);
   const second = await readPeriod(gateway2, view, b, appId, granularity);
-  const rows = compareMapped(view, first, second, metric);
+  const rows = compareMapped(view, first, second, metric2);
   const tableRows = rows.map((row) => ({
     ...row.category === void 0 ? {} : { category: row.category },
     metric: row.metric,
@@ -38042,7 +38060,7 @@ This panel widget still displays mock/Coming Soon data. No real Gateway API data
   if (rows.some((row) => row.percent === null)) notes.push("n/a percentage means period A was zero; percentage change is undefined.");
   let charts = [];
   if (spec.chartType === "line" && first.rows.length && second.rows.length) {
-    const plotted = metric ?? (view === "messagesBreakup" ? "templateSent" : view === "templateBreakup" ? "marketing" : "total");
+    const plotted = metric2 ?? (view === "messagesBreakup" ? "templateSent" : view === "templateBreakup" ? "marketing" : "total");
     const values = [...first.rows, ...second.rows].map((row) => numeric(row[plotted], plotted));
     const scale = { min: Math.min(0, ...values), max: Math.max(0, ...values) };
     charts = [
@@ -38648,6 +38666,81 @@ async function sendSandboxTemplate(gateway2, confirm, args) {
   return gateway2.sendSandboxTemplate(prepared);
 }
 
+// src/template-health.mjs
+var PAGE_SIZE = 100;
+var MAX_TEMPLATES = 1e3;
+var STATUSES = ["APPROVED", "PENDING", "REJECTED", "PAUSED", "DISABLED"];
+function countBy(items, field) {
+  const counts = {};
+  for (const item of items) {
+    const key = typeof item[field] === "string" && item[field] ? item[field] : "UNKNOWN";
+    counts[key] = (counts[key] ?? 0) + 1;
+  }
+  return counts;
+}
+function hasNextPage(page, pageNumber) {
+  const paging = page.pagingMetadata;
+  if (typeof paging?.hasNext === "boolean") return paging.hasNext;
+  if (Number.isInteger(paging?.totalPages)) return pageNumber < paging.totalPages;
+  return page.items.length === PAGE_SIZE;
+}
+async function getTemplateHealthSummary(gateway2, { appId, status, category } = {}) {
+  if (status !== void 0 && !STATUSES.includes(status)) throw new Error("Unsupported template status filter");
+  if (category !== void 0 && !["MARKETING", "UTILITY", "AUTHENTICATION"].includes(category)) {
+    throw new Error("Unsupported template category filter");
+  }
+  const all = [];
+  let pageNumber = 1;
+  let hasNext = false;
+  while (all.length < MAX_TEMPLATES) {
+    const page = await gateway2.listWhatsappTemplates(appId, pageNumber, PAGE_SIZE);
+    if (!page || !Array.isArray(page.items)) throw new Error("Gateway returned an invalid template page");
+    if (page.items.length === 0 && pageNumber > 1 && hasNext) throw new Error("Gateway template pagination ended unexpectedly");
+    all.push(...page.items.slice(0, MAX_TEMPLATES - all.length));
+    hasNext = hasNextPage(page, pageNumber);
+    if (!hasNext) break;
+    pageNumber += 1;
+  }
+  const filtered = all.filter((template) => (status === void 0 || template.status === status) && (category === void 0 || template.category === category));
+  const statusCounts = Object.fromEntries(STATUSES.map((value) => [value, 0]));
+  for (const template of filtered) {
+    statusCounts[template.status] = (statusCounts[template.status] ?? 0) + 1;
+  }
+  const qualityDistribution = countBy(filtered, "qualityScore");
+  const rejectedTemplates = filtered.filter((template) => template.status === "REJECTED").map((template) => ({
+    sourceId: template.sourceId,
+    name: template.name,
+    language: template.language,
+    rejectedReason: template.rejectedReason ?? null
+  }));
+  const lowQualityTemplates = filtered.filter((template) => ["RED", "YELLOW"].includes(String(template.qualityScore).toUpperCase())).map((template) => ({
+    sourceId: template.sourceId,
+    name: template.name,
+    qualityScore: template.qualityScore
+  }));
+  const categoryChanges = filtered.filter((template) => template.previousCategory && template.correctCategory && template.previousCategory !== template.correctCategory).map((template) => ({
+    sourceId: template.sourceId,
+    name: template.name,
+    previousCategory: template.previousCategory,
+    correctCategory: template.correctCategory
+  }));
+  return {
+    appId,
+    filters: { status: status ?? null, category: category ?? null },
+    scannedCount: all.length,
+    matchedCount: filtered.length,
+    truncated: all.length === MAX_TEMPLATES && hasNext,
+    statusCounts,
+    qualityDistribution,
+    lowQualityTemplates,
+    rejectedTemplates,
+    categoryChanges,
+    categoryDistribution: countBy(filtered, "category"),
+    languageDistribution: countBy(filtered, "language"),
+    note: "Bu \xF6zet template durumunu ve kalitesini g\xF6sterir; tek tek template g\xF6nderilme, okunma veya t\u0131klanma metriklerini i\xE7ermez."
+  };
+}
+
 // src/tool-result.mjs
 function toolResult(value) {
   const structuredContent = Array.isArray(value) ? { items: value } : value;
@@ -38660,13 +38753,103 @@ function toolResult(value) {
   };
 }
 
+// src/whatsapp-readiness.mjs
+var SECURITY_CENTER_URL = "https://business.facebook.com/settings/security";
+var VERIFICATION_NOTE = "Business verification durumu kesin olarak okunam\u0131yor.";
+var unknown2 = () => ({ status: "unknown", value: null });
+function metric(value) {
+  if (!value || typeof value !== "object") return unknown2();
+  const status = {
+    success: "ok",
+    warning: "warning",
+    danger: "action_required",
+    neutral: "unknown"
+  }[value.severity] ?? "unknown";
+  return { status, value: value.value ?? null, display: value.display ?? null };
+}
+function reviewStatus(value) {
+  if (typeof value !== "string") return unknown2();
+  const status = {
+    APPROVED: "ok",
+    PENDING: "warning",
+    REJECTED: "action_required",
+    DISABLED: "action_required"
+  }[value] ?? "unknown";
+  return { status, value };
+}
+function messagingLimit(value) {
+  if (!value || typeof value !== "object") return unknown2();
+  const tier = value.tier ?? null;
+  if (tier === "TIER_250") {
+    return {
+      status: "warning",
+      value: tier,
+      display: value.display ?? null,
+      inference: "\u0130\u015Fletme do\u011Frulanmam\u0131\u015F olabilir; bu limit tek ba\u015F\u0131na do\u011Frulama kan\u0131t\u0131 de\u011Fildir."
+    };
+  }
+  const status = tier && tier !== "TIER_NOT_SET" ? "ok" : "unknown";
+  return { status, value: tier, display: value.display ?? null };
+}
+function businessProfile(value) {
+  if (!value?.configured || !value.profile) {
+    return { status: value?.configured === false ? "warning" : "unknown", fields: null, missing: ["websites", "email", "address", "description"] };
+  }
+  const { websites, email: email3, address, description } = value.profile;
+  const fields = {
+    websites: Array.isArray(websites) && websites.some((site) => typeof site === "string" && site.trim().length > 0),
+    email: typeof email3 === "string" && email3.trim().length > 0,
+    address: typeof address === "string" && address.trim().length > 0,
+    description: typeof description === "string" && description.trim().length > 0
+  };
+  const missing = Object.keys(fields).filter((field) => !fields[field]);
+  return { status: missing.length ? "warning" : "ok", fields, missing };
+}
+async function checkWhatsappAccountReadiness(gateway2, appId) {
+  const [application, health, profile] = await Promise.allSettled([
+    gateway2.getApplication(appId),
+    gateway2.getWhatsappHealth(appId),
+    gateway2.getWhatsappBusinessProfile(appId)
+  ]);
+  const checks = {
+    accountReviewStatus: application.status === "fulfilled" ? reviewStatus(application.value.channel?.accountReviewStatus) : unknown2(),
+    accountStatus: health.status === "fulfilled" ? metric(health.value.accountStatus) : unknown2(),
+    messagingLimit: health.status === "fulfilled" ? messagingLimit(health.value.messagingLimit) : unknown2(),
+    nameStatus: health.status === "fulfilled" ? metric(health.value.nameStatus) : unknown2(),
+    phoneQuality: health.status === "fulfilled" ? metric(health.value.phoneQuality) : unknown2(),
+    codeVerificationStatus: health.status === "fulfilled" ? metric(health.value.codeVerificationStatus) : unknown2(),
+    businessProfile: profile.status === "fulfilled" ? businessProfile(profile.value) : { status: "unknown", fields: null, missing: [] }
+  };
+  const nextSteps = [];
+  if (checks.accountReviewStatus.status === "action_required" || checks.accountStatus.status === "action_required") {
+    nextSteps.push("Meta Business Manager \xFCzerinden WhatsApp hesap k\u0131s\u0131tlamalar\u0131n\u0131 inceleyin.");
+  }
+  if (checks.nameStatus.status === "action_required") nextSteps.push("Reddedilen g\xF6r\xFCnen ad\u0131 Meta \xFCzerinden d\xFCzeltip yeniden incelemeye g\xF6nderin.");
+  if (checks.codeVerificationStatus.status === "action_required" || checks.codeVerificationStatus.status === "warning") {
+    nextSteps.push("WhatsApp telefon numaras\u0131 do\u011Frulamas\u0131n\u0131 kontrol edin.");
+  }
+  if (checks.businessProfile.status === "warning") nextSteps.push(`Business profilindeki eksik alanlar\u0131 tamamlay\u0131n: ${checks.businessProfile.missing.join(", ")}.`);
+  if (checks.messagingLimit.value === "TIER_250") nextSteps.push("\u0130\u015Fletme do\u011Frulama durumunu Meta Business Manager \u2192 Security Center \xFCzerinden ayr\u0131ca kontrol edin.");
+  if (Object.values(checks).some((check2) => check2.status === "unknown")) {
+    nextSteps.push("Okunamayan kontrolleri Gateway panelinde ve Meta Business Manager\u2019da do\u011Frulay\u0131n.");
+  }
+  const overallStatus = Object.values(checks).some((check2) => check2.status === "action_required") ? "action_required" : Object.values(checks).some((check2) => check2.status === "warning") ? "warning" : Object.values(checks).every((check2) => check2.status === "ok") ? "ok" : "unknown";
+  return {
+    appId,
+    overallStatus,
+    checks,
+    nextSteps,
+    businessVerification: { status: "unknown", note: VERIFICATION_NOTE, securityCenterUrl: SECURITY_CENTER_URL }
+  };
+}
+
 // src/server.mjs
 var supportsNativeAccount = process.platform === "darwin" || process.platform === "win32";
 var accessTokenProvider = supportsNativeAccount ? new NativeSession() : { getAccessToken: async () => {
   throw new Error("Local account connection requires macOS or Windows");
 } };
 var gateway = new GatewayApiClient({ accessTokenProvider });
-var server = new McpServer({ name: "connexease-gateway-ops", version: "0.12.1" });
+var server = new McpServer({ name: "connexease-gateway-ops", version: "0.13.0" });
 var signInInProgress = false;
 var accountWriteInProgress = false;
 var templateParametersSchema = external_exports.object({
@@ -38900,6 +39083,11 @@ for (const [name, description, method] of [
     annotations: { readOnlyHint: true }
   }, guarded(({ appId }) => gateway[method](appId)));
 }
+server.registerTool("check_whatsapp_account_readiness", {
+  description: "Read available WhatsApp account, phone and business-profile checks for one owned application. Business verification cannot be read definitively; the 250 messaging limit is only a labeled inference. No account changes are made.",
+  inputSchema: { appId: external_exports.string().min(1).max(100) },
+  annotations: { readOnlyHint: true }
+}, guarded(({ appId }) => checkWhatsappAccountReadiness(gateway, appId)));
 for (const [name, description, method] of [
   ["list_my_organizations", "List organizations accessible to the signed-in user.", "listMyOrganizations"],
   ["get_organization_contact", "Read the current organization contact details.", "getOrganizationContact"],
@@ -38925,6 +39113,15 @@ server.registerTool("get_whatsapp_template", {
   inputSchema: { appId: external_exports.string().min(1).max(100), sourceId: external_exports.string().min(1).max(100) },
   annotations: { readOnlyHint: true }
 }, guarded(({ appId, sourceId }) => gateway.getWhatsappTemplate(appId, sourceId)));
+server.registerTool("get_template_health_summary", {
+  description: "Read up to 1000 templates across pages for one owned application and summarize status, quality, rejection reasons, category changes, languages and categories. This does not provide per-template sent, delivered, read or click metrics.",
+  inputSchema: {
+    appId: external_exports.string().min(1).max(100),
+    status: external_exports.enum(["APPROVED", "PENDING", "REJECTED", "PAUSED", "DISABLED"]).optional(),
+    category: external_exports.enum(["MARKETING", "UTILITY", "AUTHENTICATION"]).optional()
+  },
+  annotations: { readOnlyHint: true }
+}, guarded((args) => getTemplateHealthSummary(gateway, args)));
 server.registerTool("upload_whatsapp_template_media", {
   description: "Open a native desktop file picker; upload only the file selected by the developer to their owned WhatsApp application after exact native approval. The AI never chooses a filesystem path. Makes one request, with no automatic retry.",
   inputSchema: { appId: external_exports.string().min(1).max(100) },

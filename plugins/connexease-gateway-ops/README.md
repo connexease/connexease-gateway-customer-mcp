@@ -1,6 +1,6 @@
 # Connexease Gateway Operations
 
-This is a local macOS/Windows MCP plugin for account operations and public documentation questions in Claude Code, Codex, and Gemini CLI. Version: 0.12.1. It remains separate from the panel repository. See the repository [capability matrix](../../CAPABILITY_MATRIX.md) for feature status and remaining gaps.
+This is a local macOS/Windows MCP plugin for account operations and public documentation questions in Claude Code, Codex, and Gemini CLI. Version: 0.13.0. It remains separate from the panel repository. See the repository [capability matrix](../../CAPABILITY_MATRIX.md) for feature status and remaining gaps.
 
 Install the combined Claude plugin from this repository's marketplace:
 
@@ -26,6 +26,8 @@ Both probes check MCP discovery only; they send no Gateway request. `dist/server
 Inside Claude Code, use `/connexease-gateway-ops:ask` for live public-doc questions without account login. For account operations, use `/connexease-gateway-ops:connect`, then `/connexease-gateway-ops:panel-ops` or `/connexease-gateway-ops:sandbox-ops`. The connect command opens native email and hidden-password dialogs, calls `POST /auth/token`, checks `GET /users/me`, and stores only the refresh token in the current user's macOS Keychain or Windows DPAPI-protected Local AppData when possible. The plugin never reads the panel browser cookie or asks for credentials in chat. If secure saving fails, it keeps the verified account in process memory and attempts to remove any older stored Gateway token. A failed cleanup is explicitly reported. `disconnect_gateway_account` attempts both local token deletion and `POST /auth/logout`, reporting each outcome separately.
 
 For a single Insight page table or chart, use `/connexease-gateway-ops:insights`. It calls only the report underlying the named widget and returns a preformatted terminal table. Time-series widgets include a monochrome Unicode/braille line chart for the selected metric; category widgets include a bar chart. The chart keeps readable numeric axes and date endpoints without ANSI colors, and comparison charts share one y-axis scale. This is not the panel's interactive browser chart. The panel's Apps Overview widget still has mock/Coming Soon data, so the plugin reports it as unavailable rather than fabricating account data.
+
+Additional read-only tools: `check_whatsapp_account_readiness` combines existing application/health/profile reads but always labels Meta business verification as unknown; `get_template_health_summary` scans up to 1000 template records and reports statuses, quality, rejection reasons and category changes. Neither provides individual template send/read/click metrics.
 
 For a comparison, ask the same skill to compare one widget across two explicit start/end date ranges. It returns A and B totals, B-minus-A absolute and percentage differences, and two shared-scale text line charts for time series. Percentages are undefined when A is zero. The tool warns when date ranges overlap or differ in duration; paginated breakup data must be fully loaded before a result is shown.
 

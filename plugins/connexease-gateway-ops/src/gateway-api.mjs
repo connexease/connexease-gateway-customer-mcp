@@ -217,6 +217,10 @@ export class GatewayApiClient {
         phoneNumberId: app.channel.phoneNumberId,
         wabaId: app.channel.wabaId,
         businessUsername: app.channel.businessUsername,
+        accountReviewStatus: app.channel.accountReviewStatus ?? null,
+        currency: app.channel.currency ?? null,
+        timezone: app.channel.timezone ?? null,
+        businessUsernameStatus: app.channel.businessUsernameStatus ?? null,
         instagramAccountId: app.channel.instagramAccountId,
         instagramAccountName: app.channel.instagramAccountName,
         username: app.channel.username,
@@ -438,8 +442,9 @@ export class GatewayApiClient {
     const page = await this.#requestResponse(`/channels/whatsapp/applications/${encodeURIComponent(appId)}/templates?pageNumber=${pageNumber}&pageSize=${pageSize}`);
     const data = requireArray(page.data, 'templates');
     return {
-      items: data.map(({ sourceId, name, language, category, status, qualityScore, rejectedReason }) => ({
+      items: data.map(({ sourceId, name, language, category, status, qualityScore, rejectedReason, correctCategory, previousCategory }) => ({
         sourceId, name, language, category, status, qualityScore, rejectedReason,
+        correctCategory: correctCategory ?? null, previousCategory: previousCategory ?? null,
       })),
       pagingMetadata: page.pagingMetadata ?? null,
     };
@@ -450,8 +455,9 @@ export class GatewayApiClient {
     await this.#requireApplication(appId);
     const template = await this.#request(`/channels/whatsapp/applications/${encodeURIComponent(appId)}/templates/${encodeURIComponent(sourceId)}`);
     if (!template || template.sourceId !== sourceId) throw new Error('Gateway returned an invalid template response');
-    const { id, name, language, category, status, components, qualityScore, rejectedReason } = template;
-    return { id, sourceId, name, language, category, status, components, qualityScore, rejectedReason };
+    const { id, name, language, category, status, components, qualityScore, rejectedReason, correctCategory, previousCategory } = template;
+    return { id, sourceId, name, language, category, status, components, qualityScore, rejectedReason,
+      correctCategory: correctCategory ?? null, previousCategory: previousCategory ?? null };
   }
 
   async getWebhookStatus(appId) {

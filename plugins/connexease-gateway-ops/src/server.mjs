@@ -10,14 +10,16 @@ import { selectGatewayUploadFile } from './native-file.mjs';
 import { NativeSession, promptForGatewayCredentials, promptForGatewayOtp, promptForGatewayRegistration, promptForNewPassword, promptForPasswordChange, promptForWebhookHeaderValue } from './native-session.mjs';
 import { createApiKey, createOrganizationSecret, performPanelAction } from './panel-workflow.mjs';
 import { addSandboxTestNumber, sendSandboxTemplate, sendSandboxText } from './sandbox-workflow.mjs';
+import { getTemplateHealthSummary } from './template-health.mjs';
 import { toolResult } from './tool-result.mjs';
+import { checkWhatsappAccountReadiness } from './whatsapp-readiness.mjs';
 
 const supportsNativeAccount = process.platform === 'darwin' || process.platform === 'win32';
 const accessTokenProvider = supportsNativeAccount
   ? new NativeSession()
   : { getAccessToken: async () => { throw new Error('Local account connection requires macOS or Windows'); } };
 const gateway = new GatewayApiClient({ accessTokenProvider });
-const server = new McpServer({ name: 'connexease-gateway-ops', version: '0.12.1' });
+const server = new McpServer({ name: 'connexease-gateway-ops', version: '0.13.0' });
 let signInInProgress = false;
 let accountWriteInProgress = false;
 
@@ -272,6 +274,12 @@ for (const [name, description, method] of [
   }, guarded(({ appId }) => gateway[method](appId)));
 }
 
+server.registerTool('check_whatsapp_account_readiness', {
+  description: 'Read available WhatsApp account, phone and business-profile checks for one owned application. Business verification cannot be read definitively; the 250 messaging limit is only a labeled inference. No account changes are made.',
+  inputSchema: { appId: z.string().min(1).max(100) },
+  annotations: { readOnlyHint: true },
+}, guarded(({ appId }) => checkWhatsappAccountReadiness(gateway, appId)));
+
 for (const [name, description, method] of [
   ['list_my_organizations', 'List organizations accessible to the signed-in user.', 'listMyOrganizations'],
   ['get_organization_contact', 'Read the current organization contact details.', 'getOrganizationContact'],
@@ -299,6 +307,16 @@ server.registerTool('get_whatsapp_template', {
   inputSchema: { appId: z.string().min(1).max(100), sourceId: z.string().min(1).max(100) },
   annotations: { readOnlyHint: true },
 }, guarded(({ appId, sourceId }) => gateway.getWhatsappTemplate(appId, sourceId)));
+
+server.registerTool('get_template_health_summary', {
+  description: 'Read up to 1000 templates across pages for one owned application and summarize status, quality, rejection reasons, category changes, languages and categories. This does not provide per-template sent, delivered, read or click metrics.',
+  inputSchema: {
+    appId: z.string().min(1).max(100),
+    status: z.enum(['APPROVED', 'PENDING', 'REJECTED', 'PAUSED', 'DISABLED']).optional(),
+    category: z.enum(['MARKETING', 'UTILITY', 'AUTHENTICATION']).optional(),
+  },
+  annotations: { readOnlyHint: true },
+}, guarded((args) => getTemplateHealthSummary(gateway, args)));
 
 server.registerTool('upload_whatsapp_template_media', {
   description: 'Open a native desktop file picker; upload only the file selected by the developer to their owned WhatsApp application after exact native approval. The AI never chooses a filesystem path. Makes one request, with no automatic retry.',

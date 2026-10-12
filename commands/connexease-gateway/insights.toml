@@ -1,5 +1,5 @@
 prompt = """
-Use the bundled Connexease Gateway `insights` skill and the `gateway-account` MCP server. Fetch only the named Insight widget; for two-period comparison require both explicit date ranges.
+Use the bundled Connexease Gateway `insights` skill and the `gateway-account` MCP server. Fetch only the named Insight widget; for two-period comparison require both explicit date ranges. For a broad template-performance request, combine template health with relevant category-level Insights only and never invent per-template messaging metrics.
 
 Request: {{args}}
 """

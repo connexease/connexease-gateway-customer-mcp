@@ -39,6 +39,72 @@ test('reads application health and profiles through the panel routes after owner
   assert.equal(calls.at(-1), '/api/v1/applications');
 });
 
+test('application and template mappers retain non-secret review and category fields with null fallbacks', async () => {
+  const client = new GatewayApiClient({
+    accessTokenProvider: { getAccessToken: async () => 'test-token' },
+    baseUrl: 'https://gateway.example.test/api/v1',
+    fetchImpl: async (url, options) => {
+      assert.equal(options.method, 'GET');
+      if (url.pathname === '/api/v1/applications') return response([app]);
+      if (url.pathname === '/api/v1/applications/example-app') {
+        return response({ ...app, channel: {
+          platform: 'whatsapp', accountReviewStatus: 'APPROVED', currency: 'USD',
+          timezone: { iana_id: 'Europe/Istanbul' }, businessUsernameStatus: 'RESERVED',
+          accessToken: 'hidden',
+        } });
+      }
+      if (url.pathname.endsWith('/templates')) {
+        return response([{ sourceId: 'template-1', name: 'Welcome', language: 'en_US', category: 'UTILITY',
+          status: 'APPROVED', correctCategory: 'UTILITY', previousCategory: 'MARKETING', secret: 'hidden' },
+        { sourceId: 'template-2', name: 'Empty', language: 'en_US', category: 'UTILITY', status: 'PENDING' }]);
+      }
+      if (url.pathname.endsWith('/templates/template-1')) {
+        return response({ sourceId: 'template-1', name: 'Welcome', language: 'en_US', category: 'UTILITY',
+          status: 'APPROVED', correctCategory: 'UTILITY', previousCategory: 'MARKETING', secret: 'hidden' });
+      }
+      throw new Error(`unexpected GET ${url.pathname}`);
+    },
+  });
+  const detail = await client.getApplication(app.appId);
+  assert.equal(detail.channel.accountReviewStatus, 'APPROVED');
+  assert.equal(detail.channel.currency, 'USD');
+  assert.deepEqual(detail.channel.timezone, { iana_id: 'Europe/Istanbul' });
+  assert.equal(detail.channel.businessUsernameStatus, 'RESERVED');
+  assert.equal(detail.channel.accessToken, undefined);
+  const templates = await client.listWhatsappTemplates(app.appId);
+  assert.equal(templates.items[0].previousCategory, 'MARKETING');
+  assert.equal(templates.items[0].correctCategory, 'UTILITY');
+  assert.equal(templates.items[1].previousCategory, null);
+  assert.equal(templates.items[1].correctCategory, null);
+  const template = await client.getWhatsappTemplate(app.appId, 'template-1');
+  assert.equal(template.correctCategory, 'UTILITY');
+  assert.equal(template.previousCategory, 'MARKETING');
+  assert.doesNotMatch(JSON.stringify({ detail, templates, template }), /hidden/);
+});
+
+test('missing application review fields and template detail categories are explicit nulls', async () => {
+  const client = new GatewayApiClient({
+    accessTokenProvider: { getAccessToken: async () => 'test-token' },
+    baseUrl: 'https://gateway.example.test/api/v1',
+    fetchImpl: async (url, options) => {
+      assert.equal(options.method, 'GET');
+      if (url.pathname === '/api/v1/applications') return response([app]);
+      if (url.pathname === '/api/v1/applications/example-app') return response({ ...app, channel: { platform: 'whatsapp' } });
+      if (url.pathname.endsWith('/templates/template-2')) {
+        return response({ sourceId: 'template-2', name: 'Empty', language: 'en_US', category: 'UTILITY', status: 'PENDING' });
+      }
+      throw new Error(`unexpected GET ${url.pathname}`);
+    },
+  });
+  const application = await client.getApplication(app.appId);
+  for (const field of ['accountReviewStatus', 'currency', 'timezone', 'businessUsernameStatus']) {
+    assert.equal(application.channel[field], null);
+  }
+  const template = await client.getWhatsappTemplate(app.appId, 'template-2');
+  assert.equal(template.correctCategory, null);
+  assert.equal(template.previousCategory, null);
+});
+
 test('reads organization, wallet and billing without exposing payment credentials', async () => {
   const calls = [];
   const client = fixture({
