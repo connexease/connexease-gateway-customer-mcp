@@ -1,6 +1,6 @@
 # Connexease Gateway Customer MCP
 
-This Connexease-owned repository combines Gateway account operations and the public-documentation assistant. The `connexease-gateway-ops` package includes both: documentation questions need no Gateway login, while account operations use the user's own Gateway account. Operations version: 0.13.1. The marketplace and Gemini extension are named `connexease-gateway-customer-mcp`; the existing operations skill names stay `connexease-gateway-ops`.
+This Connexease-owned repository combines Gateway account operations and the public-documentation assistant. The `connexease-gateway-ops` package includes both: documentation questions need no Gateway login, while account operations use the user's own Gateway account. Operations version: 0.13.2. The marketplace and Gemini extension are named `connexease-gateway-customer-mcp`; the existing operations skill names stay `connexease-gateway-ops`.
 
 The GitHub repository is currently private. Installing from its URL requires GitHub access to the Connexease repository; public customer distribution is not available until repository access or a separate distribution method is arranged.
 

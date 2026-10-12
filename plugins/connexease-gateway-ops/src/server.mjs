@@ -19,7 +19,7 @@ const accessTokenProvider = supportsNativeAccount
   ? new NativeSession()
   : { getAccessToken: async () => { throw new Error('Local account connection requires macOS or Windows'); } };
 const gateway = new GatewayApiClient({ accessTokenProvider });
-const server = new McpServer({ name: 'connexease-gateway-ops', version: '0.13.1' });
+const server = new McpServer({ name: 'connexease-gateway-ops', version: '0.13.2' });
 let signInInProgress = false;
 let accountWriteInProgress = false;
 
@@ -309,7 +309,7 @@ server.registerTool('get_whatsapp_template', {
 }, guarded(({ appId, sourceId }) => gateway.getWhatsappTemplate(appId, sourceId)));
 
 server.registerTool('get_template_health_summary', {
-  description: 'Read up to 1000 templates across pages for one owned application and summarize status, quality, rejection reasons, category changes, languages and categories. A category change is "applied" when Meta already moved the template from previousCategory, or "pending" when Meta will move it to correctCategory. This does not provide per-template sent, delivered, read or click metrics.',
+  description: 'Read up to 1000 templates across pages for one owned application and summarize status, quality, rejection reasons, category changes, languages and categories. A category change is "applied" when Meta already moved the template from previousCategory, or "pending" when Meta will move it to correctCategory. When qualityNote is set, quality scores were unavailable: do not claim there are no low-quality templates. This does not provide per-template sent, delivered, read or click metrics.',
   inputSchema: {
     appId: z.string().min(1).max(100),
     status: z.enum(['APPROVED', 'PENDING', 'REJECTED', 'PAUSED', 'DISABLED']).optional(),

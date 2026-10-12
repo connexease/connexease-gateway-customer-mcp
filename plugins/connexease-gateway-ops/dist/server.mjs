@@ -38730,6 +38730,7 @@ async function getTemplateHealthSummary(gateway2, { appId, status, category } = 
     qualityScore: template.qualityScore
   }));
   const categoryChanges = filtered.flatMap(categoryChangesOf);
+  const qualityMissing = filtered.length > 0 && !filtered.some((template) => typeof template.qualityScore === "string" && template.qualityScore);
   return {
     appId,
     filters: { status: status ?? null, category: category ?? null },
@@ -38738,6 +38739,7 @@ async function getTemplateHealthSummary(gateway2, { appId, status, category } = 
     truncated: all.length === MAX_TEMPLATES && hasNext,
     statusCounts,
     qualityDistribution,
+    qualityNote: qualityMissing ? "Kalite skoru Gateway liste API'sinden gelmiyor; d\xFC\u015F\xFCk kaliteli template listesi bu y\xFCzden bo\u015F olabilir." : null,
     lowQualityTemplates,
     rejectedTemplates,
     categoryChanges,
@@ -38856,7 +38858,7 @@ var accessTokenProvider = supportsNativeAccount ? new NativeSession() : { getAcc
   throw new Error("Local account connection requires macOS or Windows");
 } };
 var gateway = new GatewayApiClient({ accessTokenProvider });
-var server = new McpServer({ name: "connexease-gateway-ops", version: "0.13.1" });
+var server = new McpServer({ name: "connexease-gateway-ops", version: "0.13.2" });
 var signInInProgress = false;
 var accountWriteInProgress = false;
 var templateParametersSchema = external_exports.object({
@@ -39121,7 +39123,7 @@ server.registerTool("get_whatsapp_template", {
   annotations: { readOnlyHint: true }
 }, guarded(({ appId, sourceId }) => gateway.getWhatsappTemplate(appId, sourceId)));
 server.registerTool("get_template_health_summary", {
-  description: 'Read up to 1000 templates across pages for one owned application and summarize status, quality, rejection reasons, category changes, languages and categories. A category change is "applied" when Meta already moved the template from previousCategory, or "pending" when Meta will move it to correctCategory. This does not provide per-template sent, delivered, read or click metrics.',
+  description: 'Read up to 1000 templates across pages for one owned application and summarize status, quality, rejection reasons, category changes, languages and categories. A category change is "applied" when Meta already moved the template from previousCategory, or "pending" when Meta will move it to correctCategory. When qualityNote is set, quality scores were unavailable: do not claim there are no low-quality templates. This does not provide per-template sent, delivered, read or click metrics.',
   inputSchema: {
     appId: external_exports.string().min(1).max(100),
     status: external_exports.enum(["APPROVED", "PENDING", "REJECTED", "PAUSED", "DISABLED"]).optional(),

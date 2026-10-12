@@ -1,4 +1,4 @@
-# Gateway panel capability matrix (0.13.1)
+# Gateway panel capability matrix (0.13.2)
 
 Scope: the local Claude Code, Codex, and Gemini CLI packages run the same Connexease Gateway MCP server, which calls only existing API routes. Its tool inventory is not proof that every route is deployed in a particular environment. Automated HTTP-stub contract tests and MCP discovery run locally; account-specific writes below have not been executed against a live Gateway account in this version.
 
@@ -17,6 +17,7 @@ Scope: the local Claude Code, Codex, and Gemini CLI packages run the same Connex
 ## Not completed by a local API-only plugin
 
 - **Definitive business verification:** the current health API omits `businessVerificationStatus`. A 250-customer messaging tier is only a warning that verification may be incomplete, never proof. Check Meta Business Manager → Security Center.
+- **Template quality in the health summary:** the Gateway template list API currently omits `qualityScore` (only template detail returns it). The summary then sets `qualityNote` instead of implying there are no low-quality templates. A backend list-mapper change is required.
 - **Per-template performance:** the available Insights API reports category-level volume and cost, not individual template sent, delivered, read or click metrics. A backend template-metrics route is required.
 - **New WhatsApp or Instagram connection:** the panel's Meta Embedded Signup is a browser OAuth flow with user interaction and a short-lived code. Calling only the final `connect` API is not a safe substitute. A browser handoff and supported authorization design are needed; backend changes may also be needed for a distributable multi-user integration.
 - **Payment method setup and wallet top-up:** the existing API can create a Stripe SetupIntent or PaymentIntent, but the user still must complete Stripe Elements / 3-D Secure in a browser. The plugin deliberately does not initiate or confirm a charge blindly. Coupon validation and billing reads are available.

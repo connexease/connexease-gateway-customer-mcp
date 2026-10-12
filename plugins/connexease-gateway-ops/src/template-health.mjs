@@ -65,6 +65,8 @@ export async function getTemplateHealthSummary(gateway, { appId, status, categor
     sourceId: template.sourceId, name: template.name, qualityScore: template.qualityScore,
   }));
   const categoryChanges = filtered.flatMap(categoryChangesOf);
+  // The Gateway template list currently omits qualityScore; an empty low-quality list then means "unknown", not "none".
+  const qualityMissing = filtered.length > 0 && !filtered.some((template) => typeof template.qualityScore === 'string' && template.qualityScore);
   return {
     appId,
     filters: { status: status ?? null, category: category ?? null },
@@ -73,6 +75,9 @@ export async function getTemplateHealthSummary(gateway, { appId, status, categor
     truncated: all.length === MAX_TEMPLATES && hasNext,
     statusCounts,
     qualityDistribution,
+    qualityNote: qualityMissing
+      ? "Kalite skoru Gateway liste API'sinden gelmiyor; düşük kaliteli template listesi bu yüzden boş olabilir."
+      : null,
     lowQualityTemplates,
     rejectedTemplates,
     categoryChanges,

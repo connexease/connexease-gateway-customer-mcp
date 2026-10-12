@@ -1,6 +1,6 @@
 {
   "name": "connexease-gateway-ops",
   "description": "Manage a Gateway account through scoped API tools and confirmed sandbox operations",
-  "version": "0.13.1",
+  "version": "0.13.2",
   "author": { "name": "Connexease" }
 }

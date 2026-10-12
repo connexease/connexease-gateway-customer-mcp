@@ -62,12 +62,12 @@ test('Gemini extension exposes the same operations server and skills', () => {
 });
 
 test('all operations manifests and MCP server use the same version', () => {
-  const version = '0.13.1';
+  const version = '0.13.2';
   assert.equal(json('plugins/connexease-gateway-ops/package.json').version, version);
   assert.equal(json('plugins/connexease-gateway-ops/package-lock.json').version, version);
   assert.equal(json('plugins/connexease-gateway-ops/.claude-plugin/plugin.json').version, version);
   assert.equal(json('plugins/connexease-gateway-ops/plugin.json').version, version);
   assert.equal(json('gemini-extension.json').version, version);
-  assert.match(read('plugins/connexease-gateway-ops/src/server.mjs'), /version: '0\.13\.1'/);
-  assert.match(read('plugins/connexease-gateway-ops/dist/server.mjs'), /version: "0\.13\.1"/);
+  assert.match(read('plugins/connexease-gateway-ops/src/server.mjs'), /version: '0\.13\.2'/);
+  assert.match(read('plugins/connexease-gateway-ops/dist/server.mjs'), /version: "0\.13\.2"/);
 });

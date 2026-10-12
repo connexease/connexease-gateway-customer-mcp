@@ -42,6 +42,7 @@ test('template health reads every page and summarizes filters, quality, rejectio
   assert.equal(result.truncated, false);
   assert.deepEqual(result.statusCounts, { APPROVED: 1, PENDING: 0, REJECTED: 1, PAUSED: 1, DISABLED: 0 });
   assert.deepEqual(result.qualityDistribution, { GREEN: 1, RED: 1, YELLOW: 1 });
+  assert.equal(result.qualityNote, null);
   assert.deepEqual(result.lowQualityTemplates.map(({ sourceId }) => sourceId), ['b', 'c']);
   assert.equal(result.rejectedTemplates[0].rejectedReason, 'Policy');
   assert.deepEqual(result.categoryChanges, [
@@ -84,6 +85,18 @@ test('empty template list returns a useful zero summary', async () => {
   assert.deepEqual(result.qualityDistribution, {});
   assert.deepEqual(result.rejectedTemplates, []);
   assert.deepEqual(result.categoryChanges, []);
+  assert.equal(result.qualityNote, null);
+});
+
+test('missing list quality scores are flagged instead of reading as no low-quality templates', async () => {
+  const { client } = clientFor([{ items: [
+    { sourceId: 'a', name: 'A', language: 'en_US', category: 'UTILITY', status: 'APPROVED', qualityScore: null },
+    { sourceId: 'b', name: 'B', language: 'en_US', category: 'MARKETING', status: 'APPROVED' },
+  ], pagingMetadata: { hasNext: false } }]);
+  const result = await getTemplateHealthSummary(client, { appId });
+  assert.deepEqual(result.qualityDistribution, { UNKNOWN: 2 });
+  assert.deepEqual(result.lowQualityTemplates, []);
+  assert.match(result.qualityNote, /Kalite skoru Gateway liste API'sinden gelmiyor/);
 });
 
 test('1000-template safety cap marks a longer list as truncated', async () => {
